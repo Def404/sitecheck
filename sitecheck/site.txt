@@ -1,0 +1,7 @@
+https://corpassist.corplab.ai/ 
+https://llm.corplab.ai/web  
+http://google.com
+example.com
+https://this-domain-definitely-does-not-exist-12345.invalid
+http://127.0.0.1:54321
+https://expired.badssl.com/

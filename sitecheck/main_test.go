@@ -146,36 +146,16 @@ func TestCheckTimeout(t *testing.T) {
 	}
 }
 
-func TestHostname(t *testing.T) {
-	tests := []struct {
-		raw     string
-		want    string
-		wantErr bool
-	}{
-		{raw: "https://example.com", want: "example.com"},
-		{raw: "https://example.com:8443/path", want: "example.com"},
-		{raw: "http://localhost:8080", want: "localhost"},
-		{raw: "https://192.168.1.10:443", want: "192.168.1.10"},
-		{raw: "example.com", wantErr: true},
-		{raw: "https://[2001:db8::1]:8443/test", want: "2001:db8::1"},
+func TestResolveIPsLocalhost(t *testing.T) {
+	got, err := resolveIPs("127.0.0.1")
+	if err != nil {
+		t.Fatalf("resolveIPs(%q) error = %v, want nil", "127.0.0.1", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.raw, func(t *testing.T) {
-			got, err := hostname(tt.raw)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("hostname(%q) = %q, nil; want error", tt.raw, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("hostname(%q) error = %v, want nil", tt.raw, err)
-			}
-			if got != tt.want {
-				t.Errorf("hostname(%q) = %q, want %q", tt.raw, got, tt.want)
-			}
-		})
+	if len(got) == 0 {
+		t.Fatal("resolveIPs returned no addresses")
+	}
+	if !slices.Contains(got, "127.0.0.1") {
+		t.Errorf("resolveIPs() = %#v, want address %q", got, "127.0.0.1")
 	}
 }
 
@@ -222,4 +202,16 @@ https://gitlab.example.com
 			t.Errorf("loadURLs() = %#v, want nil", got)
 		}
 	})
+}
+
+func fakeResolver(host string) ([]string, error) {
+	if host == "example.com" {
+		return []string{"192.0.2.10"}, nil
+	}
+
+	return nil, fmt.Errorf("unexpected host: %s", host)
+}
+
+func failingResolver(host string) ([]string, error) {
+	return nil, fmt.Errorf("resolve %s: dns failure", host)
 }

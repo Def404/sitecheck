@@ -21,6 +21,8 @@ type Result struct {
 	Duration   time.Duration
 	Err        error
 	Reason     string
+	IPs        []string
+	DNSErr     error
 }
 
 func main() {
@@ -109,38 +111,37 @@ func loadURLs(path string) ([]string, error) {
 }
 
 func check(client *http.Client, url string) Result {
+
+	result := Result{
+		URL: url,
+	}
+
 	start := time.Now()
 
-	if _, err := parseURL(url); err != nil {
-		return Result{
-			URL:    url,
-			Err:    err,
-			Reason: "invalid URL",
-		}
+	u, err := parseURL(url)
+	if err != nil {
+		result.Err = err
+		result.Reason = "invalid URL"
+		return result
 	}
 
 	resp, err := client.Get(url)
+	result.Duration = time.Since(start)
+
 	if err != nil {
-		d := time.Since(start)
+		result.Err = err
+		result.Reason = errorReason(err)
+	} else {
+		defer resp.Body.Close()
 
-		return Result{
-			URL:      url,
-			Duration: d,
-			Err:      err,
-			Reason:   errorReason(err),
-		}
+		result.StatusCode = resp.StatusCode
+		result.Up = isUp(resp.StatusCode)
+		result.Reason = statusReason(resp.StatusCode)
 	}
-	defer resp.Body.Close()
 
-	d := time.Since(start)
+	result.IPs, result.DNSErr = resolveIPs(u.Hostname())
 
-	return Result{
-		URL:        url,
-		StatusCode: resp.StatusCode,
-		Up:         isUp(resp.StatusCode),
-		Duration:   d,
-		Reason:     statusReason(resp.StatusCode),
-	}
+	return result
 }
 
 func parseURL(raw string) (*url.URL, error) {
@@ -215,13 +216,19 @@ func isTLSError(err error) bool {
 	return false
 }
 
-func hostname(raw string) (string, error) {
-	u, err := parseURL(raw)
+func resolveIPs(host string) ([]string, error) {
+	ips, err := net.LookupIP(host)
+
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("resolve IPs for %q: %w", host, err)
 	}
 
-	return u.Hostname(), nil
+	addrs := make([]string, 0, len(ips))
+	for _, ip := range ips {
+		addrs = append(addrs, ip.String())
+	}
+
+	return addrs, nil
 }
 
 func statusReason(statusCode int) string {
@@ -278,5 +285,17 @@ func printResult(result Result) {
 
 	if result.Reason != "" {
 		fmt.Printf("\tReason: %s\n", result.Reason)
+	}
+
+	if len(result.IPs) != 0 {
+
+		fmt.Printf("\tIPS:\n")
+		for _, ip := range result.IPs {
+			fmt.Printf("\t\t- %s\n", ip)
+		}
+	}
+
+	if result.DNSErr != nil {
+		fmt.Printf("\tDNS Error: %v\n", result.DNSErr)
 	}
 }

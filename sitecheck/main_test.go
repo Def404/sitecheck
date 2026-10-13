@@ -35,7 +35,7 @@ func TestIsUp(t *testing.T) {
 	}
 }
 
-func TestValidateURL(t *testing.T) {
+func TestParseURL(t *testing.T) {
 	tests := []struct {
 		raw     string
 		wantErr bool
@@ -50,15 +50,21 @@ func TestValidateURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.raw, func(t *testing.T) {
-			err := validateURL(tt.raw)
+			u, err := parseURL(tt.raw)
 			if tt.wantErr {
 				if err == nil {
-					t.Fatalf("validateURL(%q) = nil, want error", tt.raw)
+					t.Fatalf("parseURL(%q) = %v, nil; want error", tt.raw, u)
+				}
+				if u != nil {
+					t.Errorf("parseURL(%q) = %v, want nil", tt.raw, u)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("validateURL(%q) = %v, want nil", tt.raw, err)
+				t.Fatalf("parseURL(%q) error = %v, want nil", tt.raw, err)
+			}
+			if u == nil {
+				t.Fatalf("parseURL(%q) = nil, want URL", tt.raw)
 			}
 		})
 	}
@@ -137,6 +143,39 @@ func TestCheckTimeout(t *testing.T) {
 	}
 	if result.Duration <= 0 {
 		t.Errorf("Duration = %v, want > 0", result.Duration)
+	}
+}
+
+func TestHostname(t *testing.T) {
+	tests := []struct {
+		raw     string
+		want    string
+		wantErr bool
+	}{
+		{raw: "https://example.com", want: "example.com"},
+		{raw: "https://example.com:8443/path", want: "example.com"},
+		{raw: "http://localhost:8080", want: "localhost"},
+		{raw: "https://192.168.1.10:443", want: "192.168.1.10"},
+		{raw: "example.com", wantErr: true},
+		{raw: "https://[2001:db8::1]:8443/test", want: "2001:db8::1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.raw, func(t *testing.T) {
+			got, err := hostname(tt.raw)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("hostname(%q) = %q, nil; want error", tt.raw, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("hostname(%q) error = %v, want nil", tt.raw, err)
+			}
+			if got != tt.want {
+				t.Errorf("hostname(%q) = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
 	}
 }
 

@@ -111,7 +111,7 @@ func loadURLs(path string) ([]string, error) {
 func check(client *http.Client, url string) Result {
 	start := time.Now()
 
-	if err := validateURL(url); err != nil {
+	if _, err := parseURL(url); err != nil {
 		return Result{
 			URL:    url,
 			Err:    err,
@@ -143,15 +143,17 @@ func check(client *http.Client, url string) Result {
 	}
 }
 
-func validateURL(raw string) error {
+func parseURL(raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("parse URL %q: %w", raw, err)
 	}
-	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("invalid url: %s", raw)
+
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return nil, fmt.Errorf("invalid URL: %q", raw)
 	}
-	return err
+
+	return u, nil
 }
 
 func isUp(statusCode int) bool {
@@ -187,15 +189,7 @@ func isDNSError(err error) bool {
 }
 
 func isConnectionRefused(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		return true
-	}
-
-	return false
+	return errors.Is(err, syscall.ECONNREFUSED)
 }
 
 func isTLSError(err error) bool {
@@ -219,6 +213,15 @@ func isTLSError(err error) bool {
 	}
 
 	return false
+}
+
+func hostname(raw string) (string, error) {
+	u, err := parseURL(raw)
+	if err != nil {
+		return "", err
+	}
+
+	return u.Hostname(), nil
 }
 
 func statusReason(statusCode int) string {

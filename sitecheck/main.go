@@ -74,10 +74,14 @@ type Options struct {
 	TextOutput string
 }
 
+var ErrSitesDown = errors.New("sites are down")
+
 func main() {
 
 	err := run(os.Args[1:])
-
+	if errors.Is(err, ErrSitesDown) {
+		os.Exit(1)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
@@ -102,7 +106,6 @@ func run(args []string) error {
 	}
 
 	client := &http.Client{
-		Timeout: timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse // не идти по redirect, вернуть ответ как есть
 		},
@@ -123,10 +126,7 @@ func run(args []string) error {
 		}
 		if opts.OutputFile == "" {
 			fmt.Println(string(data))
-			return nil
-		}
-		err = saveJSON(opts.OutputFile, data)
-		if err != nil {
+		} else if err = saveJSON(opts.OutputFile, data); err != nil {
 			return fmt.Errorf("save JSON report to %s: %w", opts.OutputFile, err)
 		}
 	case opts.JSONOutput:
@@ -135,10 +135,7 @@ func run(args []string) error {
 			if err != nil {
 				return err
 			}
-			return nil
-		}
-		err := saveJSONResults(opts.OutputFile, results)
-		if err != nil {
+		} else if err := saveJSONResults(opts.OutputFile, results); err != nil {
 			return fmt.Errorf("save JSON report to %s: %w", opts.OutputFile, err)
 		}
 	default:
@@ -154,10 +151,14 @@ func run(args []string) error {
 			if err := printReport(os.Stdout, report); err != nil {
 				return err
 			}
-			return nil
-		}
-		if err := writeReportToBoth(report, opts.TextOutput); err != nil {
+		} else if err := writeReportToBoth(report, opts.TextOutput); err != nil {
 			return err
+		}
+	}
+
+	for _, result := range results {
+		if !result.Up {
+			return ErrSitesDown
 		}
 	}
 

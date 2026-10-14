@@ -62,8 +62,13 @@ func run(args []string) error {
 		return fmt.Errorf("load urls from %s: %w", path, err)
 	}
 
+	timeout, err := getTimeout()
+	if err != nil {
+		return err
+	}
+
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse // не идти по redirect, вернуть ответ как есть
 		},
@@ -207,7 +212,7 @@ func check(client *http.Client, url string, resolve func(string) ([]string, erro
 		if port == "" {
 			port = "443"
 		}
-		result.TLSExpiresAt, result.TLSErr = getTLSExpiration(u.Hostname(), port)
+		result.TLSExpiresAt, result.TLSErr = getTLSExpiration(u.Hostname(), port, client.Timeout)
 	}
 
 	return result
@@ -313,10 +318,10 @@ func resolveIPs(host string) ([]string, error) {
 	return addrs, nil
 }
 
-func getTLSExpiration(host string, port string) (time.Time, error) {
+func getTLSExpiration(host string, port string, timeout time.Duration) (time.Time, error) {
 
 	conn, err := tls.DialWithDialer(
-		&net.Dialer{Timeout: 5 * time.Second},
+		&net.Dialer{Timeout: timeout},
 		"tcp",
 		net.JoinHostPort(host, port),
 		&tls.Config{
@@ -333,7 +338,7 @@ func getTLSExpiration(host string, port string) (time.Time, error) {
 	certs := conn.ConnectionState().PeerCertificates
 
 	if len(certs) == 0 {
-		return time.Time{}, fmt.Errorf("TLS connection to %s: %w", host, err)
+		return time.Time{}, fmt.Errorf("TLS connection to %s: no peer certificates", host)
 	}
 
 	return certs[0].NotAfter, nil
@@ -507,4 +512,23 @@ func saveJSONResults(filename string, results []Result) error {
 	}
 
 	return saveJSON(filename, data)
+}
+
+func getTimeout() (time.Duration, error) {
+	value := os.Getenv("SITECHECK_TIMEOUT")
+
+	if value == "" {
+		return 5 * time.Second, nil
+	}
+
+	timeout, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid SITECHECK_TIMEOUT %q: %w", value, err)
+	}
+
+	if timeout <= 0 {
+		return 0, fmt.Errorf("SITECHECK_TIMEOUT must be positive, got %s", timeout)
+	}
+
+	return timeout, nil
 }

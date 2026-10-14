@@ -146,9 +146,7 @@ func TestCheckHTTPStatus(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := &http.Client{
-				Timeout: time.Second,
-			}
+			client := &http.Client{}
 
 			result := check(client, server.URL, time.Second, fakeResolver)
 
@@ -178,9 +176,7 @@ func TestCheckTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &http.Client{
-		Timeout: 50 * time.Millisecond,
-	}
+	client := &http.Client{}
 
 	result := check(client, server.URL, 50*time.Millisecond, fakeResolver)
 
@@ -207,9 +203,7 @@ func TestCheckDNSFailure(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := &http.Client{
-		Timeout: time.Second,
-	}
+	client := &http.Client{}
 
 	result := check(client, server.URL, time.Second, failingResolver)
 

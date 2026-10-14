@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,16 +14,16 @@ import (
 
 func TestParseArgs(t *testing.T) {
 	tests := []struct {
-		name           string
-		args           []string
-		wantFilename   string
-		wantJSONOutput bool
-		wantOutputFile string
-		wantErr        string
+		name    string
+		args    []string
+		want    Options
+		wantErr string
 	}{
-		{name: "filename", args: []string{"sites.txt"}, wantFilename: "sites.txt"},
-		{name: "json and filename", args: []string{"--json", "sites.txt"}, wantFilename: "sites.txt", wantJSONOutput: true},
-		{name: "json output and filename", args: []string{"--json", "--output", "report.json", "sites.txt"}, wantFilename: "sites.txt", wantJSONOutput: true, wantOutputFile: "report.json"},
+		{name: "filename", args: []string{"sites.txt"}, want: Options{Path: "sites.txt"}},
+		{name: "json and filename", args: []string{"--json", "sites.txt"}, want: Options{Path: "sites.txt", JSONOutput: true}},
+		{name: "json output and filename", args: []string{"--json", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", JSONOutput: true, OutputFile: "report.json"}},
+		{name: "json report", args: []string{"--json-report", "sites.txt"}, want: Options{Path: "sites.txt", JSONReport: true}},
+		{name: "json report output", args: []string{"--json-report", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", JSONReport: true, OutputFile: "report.json"}},
 		{name: "no args", args: []string{}, wantErr: "filename is required"},
 		{name: "json without filename", args: []string{"--json"}, wantErr: "filename is required"},
 		{name: "unknown flag", args: []string{"--unknown", "sites.txt"}, wantErr: "flag provided but not defined: -unknown"},
@@ -31,33 +32,31 @@ func TestParseArgs(t *testing.T) {
 		{name: "empty filename", args: []string{""}, wantErr: "filename is required"},
 		{name: "json and empty filename", args: []string{"--json", ""}, wantErr: "filename is required"},
 		{name: "three filenames", args: []string{"a.txt", "b.txt", "c.txt"}, wantErr: "too many arguments"},
-		{name: "output without json", args: []string{"--output", "report.json", "sites.txt"}, wantErr: "--output requires --json"},
+		{name: "output without json", args: []string{"--output", "report.json", "sites.txt"}, wantErr: "--output requires --json or --json-report"},
 		{name: "json output without filename", args: []string{"--json", "--output", "report.json"}, wantErr: "filename is required"},
+		{name: "json and json report", args: []string{"--json", "--json-report", "sites.txt"}, wantErr: "--json and --json-report cannot be used together"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			filename, jsonOutput, outputFile, err := parseArgs(tt.args)
+			got, err := parseArgs(tt.args)
 			if tt.wantErr != "" {
 				if err == nil {
-					t.Fatalf("parseArgs(%q) = %q, %v, %q, nil; want error %q", tt.args, filename, jsonOutput, outputFile, tt.wantErr)
+					t.Fatalf("parseArgs(%q) = %+v, nil; want error %q", tt.args, got, tt.wantErr)
 				}
 				if err.Error() != tt.wantErr {
 					t.Errorf("error = %q, want %q", err.Error(), tt.wantErr)
+				}
+				if got != (Options{}) {
+					t.Errorf("parseArgs(%q) = %+v, want zero Options", tt.args, got)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("parseArgs(%q) error = %v, want nil", tt.args, err)
 			}
-			if filename != tt.wantFilename {
-				t.Errorf("filename = %q, want %q", filename, tt.wantFilename)
-			}
-			if jsonOutput != tt.wantJSONOutput {
-				t.Errorf("jsonOutput = %v, want %v", jsonOutput, tt.wantJSONOutput)
-			}
-			if outputFile != tt.wantOutputFile {
-				t.Errorf("outputFile = %q, want %q", outputFile, tt.wantOutputFile)
+			if got != tt.want {
+				t.Errorf("parseArgs(%q) = %+v, want %+v", tt.args, got, tt.want)
 			}
 		})
 	}
@@ -286,6 +285,27 @@ https://gitlab.example.com
 			t.Errorf("loadURLs() = %#v, want nil", got)
 		}
 	})
+}
+
+func TestCountReasons(t *testing.T) {
+	results := []Result{
+		{Reason: "timeout"},
+		{Reason: "DNS"},
+		{Reason: "timeout"},
+		{Reason: "connection refused"},
+		{Reason: "DNS"},
+		{Reason: ""},
+	}
+
+	got := countReasons(results)
+	want := map[string]int{
+		"timeout":            2,
+		"DNS":                2,
+		"connection refused": 1,
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("countReasons() = %#v, want %#v", got, want)
+	}
 }
 
 func fakeResolver(host string) ([]string, error) {

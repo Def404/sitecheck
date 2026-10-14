@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -31,12 +33,43 @@ type Result struct {
 	TLSErr       error
 }
 
+func (r Result) State() string {
+	if r.Up {
+		return "UP"
+	}
+
+	return "DOWN"
+}
+
 type JSONResult struct {
 	URL        string `json:"url"`
 	StatusCode int    `json:"status_code"`
 	Up         bool   `json:"up"`
 	DurationMS int64  `json:"duration_ms"`
 	Reason     string `json:"reason"`
+}
+
+type Report struct {
+	Results   []Result
+	Total     int
+	UpCount   int
+	DownCount int
+	Reasons   map[string]int
+}
+
+type JSONReport struct {
+	Total   int            `json:"total"`
+	Up      int            `json:"up"`
+	Down    int            `json:"down"`
+	Reasons map[string]int `json:"reasons"`
+	Results []JSONResult   `json:"results"`
+}
+
+type Options struct {
+	Path       string
+	JSONOutput bool
+	JSONReport bool
+	OutputFile string
 }
 
 func main() {
@@ -51,15 +84,14 @@ func main() {
 
 func run(args []string) error {
 
-	path, jsonOutput, outputFile, err := parseArgs(args)
-
+	opts, err := parseArgs(args)
 	if err != nil {
 		return err
 	}
 
-	urls, err := loadURLs(path)
+	urls, err := loadURLs(opts.Path)
 	if err != nil {
-		return fmt.Errorf("load urls from %s: %w", path, err)
+		return fmt.Errorf("load urls from %s: %w", opts.Path, err)
 	}
 
 	timeout, err := getTimeout()
@@ -74,73 +106,89 @@ func run(args []string) error {
 		},
 	}
 
-	upCount := 0
-	downCount := 0
-
 	results := make([]Result, 0, len(urls))
 
 	for _, url := range urls {
-
 		result := check(client, url, resolveIPs)
 		results = append(results, result)
-
-		if result.Up {
-			upCount++
-		} else {
-			downCount++
-		}
 	}
 
 	switch {
-	case !jsonOutput:
+	case opts.JSONReport:
+		data, err := marshalReport(buildReport(results))
+		if err != nil {
+			return err
+		}
+		if opts.OutputFile == "" {
+			fmt.Println(string(data))
+			return nil
+		}
+		err = saveJSON(opts.OutputFile, data)
+		if err != nil {
+			return fmt.Errorf("save JSON report to %s: %w", opts.OutputFile, err)
+		}
+	case opts.JSONOutput:
+		if opts.OutputFile == "" {
+			err := printJSONResults(results)
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+		err := saveJSONResults(opts.OutputFile, results)
+		if err != nil {
+			return fmt.Errorf("save JSON report to %s: %w", opts.OutputFile, err)
+		}
+	default:
+		report := buildReport(results)
+
 		for _, res := range results {
 			fmt.Printf("Checking: %s\n", res.URL)
 			printResult(res)
 			fmt.Println()
 		}
 
-		fmt.Printf("Summary: %d UP / %d DOWN\n", upCount, downCount)
-	case outputFile == "":
-		err := printJSONResults(results)
-		if err != nil {
-			return err
-		}
-	default:
-		err := saveJSONResults(outputFile, results)
-		if err != nil {
-			return fmt.Errorf("save JSON report to %s: %w", outputFile, err)
-		}
+		printReport(report)
 	}
 
 	return nil
 }
 
-func parseArgs(args []string) (filename string, jsonOutput bool, outputFile string, err error) {
+func parseArgs(args []string) (Options, error) {
 	fs := flag.NewFlagSet("sitecheck", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
 	json := fs.Bool("json", false, "output results as JSON")
+	jsonReport := fs.Bool("json-report", false, "output a JSON report")
 	output := fs.String("output", "", "write JSON report to this file")
 
 	if err := fs.Parse(args); err != nil {
-		return "", false, "", err
+		return Options{}, err
 	}
 
 	rest := fs.Args()
 	if len(rest) != 1 {
 		if len(rest) == 0 {
-			return "", false, "", errors.New("filename is required")
+			return Options{}, errors.New("filename is required")
 		}
-		return "", false, "", errors.New("too many arguments")
+		return Options{}, errors.New("too many arguments")
 	}
 	if rest[0] == "" {
-		return "", false, "", errors.New("filename is required")
+		return Options{}, errors.New("filename is required")
 	}
-	if *output != "" && !*json {
-		return "", false, "", errors.New("--output requires --json")
+	if *output != "" && !*json && !*jsonReport {
+		return Options{}, errors.New("--output requires --json or --json-report")
+	}
+	if *json && *jsonReport {
+		return Options{}, errors.New("--json and --json-report cannot be used together")
 	}
 
-	return rest[0], *json, *output, nil
+	return Options{
+		Path:       rest[0],
+		JSONOutput: *json,
+		JSONReport: *jsonReport,
+		OutputFile: *output,
+	}, nil
 }
 
 func loadURLs(path string) ([]string, error) {
@@ -238,6 +286,10 @@ func isUp(statusCode int) bool {
 func isTimeout(err error) bool {
 	if err == nil {
 		return false
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
 	}
 
 	var netErr net.Error
@@ -416,11 +468,8 @@ func printResult(result Result) {
 		fmt.Printf("\tStatus: %d\n", result.StatusCode)
 	}
 
-	if result.Up {
-		fmt.Printf("\tState: UP\n")
-	} else {
-		fmt.Printf("\tState: DOWN\n")
-	}
+	state := result.State()
+	fmt.Printf("\tState: %s\n", state)
 
 	if u, err := parseURL(result.URL); err == nil && u.Scheme == "https" {
 		status := tlsStatus(result.TLSExpiresAt, result.TLSErr)
@@ -481,6 +530,25 @@ func toJSONResult(result Result) JSONResult {
 	}
 }
 
+func toJSONReport(report Report) JSONReport {
+	results := make([]JSONResult, 0, len(report.Results))
+	for _, result := range report.Results {
+		results = append(results, toJSONResult(result))
+	}
+
+	return JSONReport{
+		Total:   report.Total,
+		Up:      report.UpCount,
+		Down:    report.DownCount,
+		Reasons: report.Reasons,
+		Results: results,
+	}
+}
+
+func marshalReport(report Report) ([]byte, error) {
+	return json.MarshalIndent(toJSONReport(report), "", "    ")
+}
+
 func printJSON(result Result) error {
 	data, err := json.MarshalIndent(toJSONResult(result), "", "  ")
 	if err != nil {
@@ -514,6 +582,30 @@ func saveJSONResults(filename string, results []Result) error {
 	return saveJSON(filename, data)
 }
 
+func printReport(report Report) {
+	fmt.Println("Summary")
+	fmt.Println("-------")
+	fmt.Printf("Total:  %d\n", report.Total)
+	fmt.Printf("UP:     %d\n", report.UpCount)
+	fmt.Printf("DOWN:   %d\n", report.DownCount)
+
+	if len(report.Reasons) == 0 {
+		return
+	}
+
+	reasons := make([]string, 0, len(report.Reasons))
+	for reason := range report.Reasons {
+		reasons = append(reasons, reason)
+	}
+	sort.Strings(reasons)
+
+	fmt.Println()
+	fmt.Println("Reasons:")
+	for _, reason := range reasons {
+		fmt.Printf("  %s: %d\n", reason, report.Reasons[reason])
+	}
+}
+
 func getTimeout() (time.Duration, error) {
 	value := os.Getenv("SITECHECK_TIMEOUT")
 
@@ -531,4 +623,35 @@ func getTimeout() (time.Duration, error) {
 	}
 
 	return timeout, nil
+}
+
+func countReasons(results []Result) map[string]int {
+	counts := make(map[string]int)
+	for _, result := range results {
+		if result.Reason == "" {
+			continue
+		}
+		counts[result.Reason]++
+	}
+	return counts
+}
+
+func buildReport(results []Result) Report {
+
+	total := len(results)
+	upCount := 0
+
+	for _, result := range results {
+		if result.Up {
+			upCount++
+		}
+	}
+
+	return Report{
+		Results:   results,
+		Total:     total,
+		UpCount:   upCount,
+		DownCount: total - upCount,
+		Reasons:   countReasons(results),
+	}
 }

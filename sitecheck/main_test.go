@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"net/http"
@@ -35,6 +36,9 @@ func TestParseArgs(t *testing.T) {
 		{name: "output without json", args: []string{"--output", "report.json", "sites.txt"}, wantErr: "--output requires --json or --json-report"},
 		{name: "json output without filename", args: []string{"--json", "--output", "report.json"}, wantErr: "filename is required"},
 		{name: "json and json report", args: []string{"--json", "--json-report", "sites.txt"}, wantErr: "--json and --json-report cannot be used together"},
+		{name: "text output", args: []string{"--text-output", "report.txt", "sites.txt"}, want: Options{Path: "sites.txt", TextOutput: "report.txt"}},
+		{name: "json and text output", args: []string{"--json", "--text-output", "report.txt", "sites.txt"}, wantErr: "--text-output cannot be used with --json or --json-report"},
+		{name: "json report and text output", args: []string{"--json-report", "--text-output", "report.txt", "sites.txt"}, wantErr: "--text-output cannot be used with --json or --json-report"},
 	}
 
 	for _, tt := range tests {
@@ -146,7 +150,7 @@ func TestCheckHTTPStatus(t *testing.T) {
 				Timeout: time.Second,
 			}
 
-			result := check(client, server.URL, fakeResolver)
+			result := check(client, server.URL, time.Second, fakeResolver)
 
 			if result.StatusCode != tt.statusCode {
 				t.Errorf("StatusCode = %d, want %d", result.StatusCode, tt.statusCode)
@@ -178,7 +182,7 @@ func TestCheckTimeout(t *testing.T) {
 		Timeout: 50 * time.Millisecond,
 	}
 
-	result := check(client, server.URL, fakeResolver)
+	result := check(client, server.URL, 50*time.Millisecond, fakeResolver)
 
 	if result.Up {
 		t.Errorf("Up = %v, want false", result.Up)
@@ -207,7 +211,7 @@ func TestCheckDNSFailure(t *testing.T) {
 		Timeout: time.Second,
 	}
 
-	result := check(client, server.URL, failingResolver)
+	result := check(client, server.URL, time.Second, failingResolver)
 
 	if !result.Up {
 		t.Errorf("Up = %v, want true", result.Up)
@@ -230,7 +234,7 @@ func TestCheckDNSFailure(t *testing.T) {
 }
 
 func TestResolveIPsLocalhost(t *testing.T) {
-	got, err := resolveIPs("127.0.0.1")
+	got, err := resolveIPs(context.Background(), "127.0.0.1")
 	if err != nil {
 		t.Fatalf("resolveIPs(%q) error = %v, want nil", "127.0.0.1", err)
 	}
@@ -308,7 +312,7 @@ func TestCountReasons(t *testing.T) {
 	}
 }
 
-func fakeResolver(host string) ([]string, error) {
+func fakeResolver(ctx context.Context, host string) ([]string, error) {
 	if host == "example.com" {
 		return []string{"192.0.2.10"}, nil
 	}
@@ -316,6 +320,6 @@ func fakeResolver(host string) ([]string, error) {
 	return nil, fmt.Errorf("unexpected host: %s", host)
 }
 
-func failingResolver(host string) ([]string, error) {
+func failingResolver(ctx context.Context, host string) ([]string, error) {
 	return nil, fmt.Errorf("resolve %s: dns failure", host)
 }

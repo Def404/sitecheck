@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -70,6 +71,7 @@ type Options struct {
 	JSONOutput bool
 	JSONReport bool
 	OutputFile string
+	TextOutput string
 }
 
 func main() {
@@ -109,7 +111,7 @@ func run(args []string) error {
 	results := make([]Result, 0, len(urls))
 
 	for _, url := range urls {
-		result := check(client, url, resolveIPs)
+		result := check(client, url, timeout, resolveIPs)
 		results = append(results, result)
 	}
 
@@ -148,7 +150,15 @@ func run(args []string) error {
 			fmt.Println()
 		}
 
-		printReport(report)
+		if opts.TextOutput == "" {
+			if err := printReport(os.Stdout, report); err != nil {
+				return err
+			}
+			return nil
+		}
+		if err := writeReportToBoth(report, opts.TextOutput); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -161,6 +171,7 @@ func parseArgs(args []string) (Options, error) {
 	json := fs.Bool("json", false, "output results as JSON")
 	jsonReport := fs.Bool("json-report", false, "output a JSON report")
 	output := fs.String("output", "", "write JSON report to this file")
+	textOutput := fs.String("text-output", "", "write the text summary to this file")
 
 	if err := fs.Parse(args); err != nil {
 		return Options{}, err
@@ -182,12 +193,16 @@ func parseArgs(args []string) (Options, error) {
 	if *json && *jsonReport {
 		return Options{}, errors.New("--json and --json-report cannot be used together")
 	}
+	if *textOutput != "" && (*json || *jsonReport) {
+		return Options{}, errors.New("--text-output cannot be used with --json or --json-report")
+	}
 
 	return Options{
 		Path:       rest[0],
 		JSONOutput: *json,
 		JSONReport: *jsonReport,
 		OutputFile: *output,
+		TextOutput: *textOutput,
 	}, nil
 }
 
@@ -224,13 +239,18 @@ func loadURLs(path string) ([]string, error) {
 	return lines, nil
 }
 
-func check(client *http.Client, url string, resolve func(string) ([]string, error)) Result {
+func check(client *http.Client, url string, timeout time.Duration, resolve func(context.Context, string) ([]string, error)) (result Result) {
+	start := time.Now()
+	defer func() {
+		result.Duration = time.Since(start)
+	}()
 
-	result := Result{
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	result = Result{
 		URL: url,
 	}
-
-	start := time.Now()
 
 	u, err := parseURL(url)
 	if err != nil {
@@ -239,28 +259,32 @@ func check(client *http.Client, url string, resolve func(string) ([]string, erro
 		return result
 	}
 
-	resp, err := client.Get(url)
-	result.Duration = time.Since(start)
-
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		result.Err = err
 		result.Reason = errorReason(err)
 	} else {
-		defer resp.Body.Close()
+		resp, err := client.Do(req)
+		if err != nil {
+			result.Err = err
+			result.Reason = errorReason(err)
+		} else {
+			defer resp.Body.Close()
 
-		result.StatusCode = resp.StatusCode
-		result.Up = isUp(resp.StatusCode)
-		result.Reason = statusReason(resp.StatusCode)
+			result.StatusCode = resp.StatusCode
+			result.Up = isUp(resp.StatusCode)
+			result.Reason = statusReason(resp.StatusCode)
+		}
 	}
 
-	result.IPs, result.DNSErr = resolve(u.Hostname())
+	result.IPs, result.DNSErr = resolve(ctx, u.Hostname())
 
 	if u.Scheme == "https" {
 		port := u.Port()
 		if port == "" {
 			port = "443"
 		}
-		result.TLSExpiresAt, result.TLSErr = getTLSExpiration(u.Hostname(), port, client.Timeout)
+		result.TLSExpiresAt, result.TLSErr = getTLSExpiration(ctx, u.Hostname(), port)
 	}
 
 	return result
@@ -355,40 +379,39 @@ func isExpiredCertificate(err error) bool {
 	return false
 }
 
-func resolveIPs(host string) ([]string, error) {
-	ips, err := net.LookupIP(host)
-
+func resolveIPs(ctx context.Context, host string) ([]string, error) {
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
 	if err != nil {
 		return nil, fmt.Errorf("resolve IPs for %q: %w", host, err)
 	}
 
 	addrs := make([]string, 0, len(ips))
 	for _, ip := range ips {
-		addrs = append(addrs, ip.String())
+		addrs = append(addrs, ip.IP.String())
 	}
 
 	return addrs, nil
 }
 
-func getTLSExpiration(host string, port string, timeout time.Duration) (time.Time, error) {
-
-	conn, err := tls.DialWithDialer(
-		&net.Dialer{Timeout: timeout},
-		"tcp",
-		net.JoinHostPort(host, port),
-		&tls.Config{
+func getTLSExpiration(ctx context.Context, host string, port string) (time.Time, error) {
+	dialer := &tls.Dialer{
+		Config: &tls.Config{
 			ServerName: host,
 		},
-	)
+	}
 
+	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
 	if err != nil {
 		return time.Time{}, fmt.Errorf("TLS connection to %s: %w", host, err)
 	}
-
 	defer conn.Close()
 
-	certs := conn.ConnectionState().PeerCertificates
+	tlsConn, ok := conn.(*tls.Conn)
+	if !ok {
+		return time.Time{}, fmt.Errorf("TLS connection to %s: unexpected connection type %T", host, conn)
+	}
 
+	certs := tlsConn.ConnectionState().PeerCertificates
 	if len(certs) == 0 {
 		return time.Time{}, fmt.Errorf("TLS connection to %s: no peer certificates", host)
 	}
@@ -582,15 +605,29 @@ func saveJSONResults(filename string, results []Result) error {
 	return saveJSON(filename, data)
 }
 
-func printReport(report Report) {
-	fmt.Println("Summary")
-	fmt.Println("-------")
-	fmt.Printf("Total:  %d\n", report.Total)
-	fmt.Printf("UP:     %d\n", report.UpCount)
-	fmt.Printf("DOWN:   %d\n", report.DownCount)
+func printReport(w io.Writer, report Report) error {
+	var err error
+	println := func(args ...any) {
+		if err != nil {
+			return
+		}
+		_, err = fmt.Fprintln(w, args...)
+	}
+	printf := func(format string, args ...any) {
+		if err != nil {
+			return
+		}
+		_, err = fmt.Fprintf(w, format, args...)
+	}
 
-	if len(report.Reasons) == 0 {
-		return
+	println("Summary")
+	println("-------")
+	printf("Total:  %d\n", report.Total)
+	printf("UP:     %d\n", report.UpCount)
+	printf("DOWN:   %d\n", report.DownCount)
+
+	if err != nil || len(report.Reasons) == 0 {
+		return err
 	}
 
 	reasons := make([]string, 0, len(report.Reasons))
@@ -599,11 +636,39 @@ func printReport(report Report) {
 	}
 	sort.Strings(reasons)
 
-	fmt.Println()
-	fmt.Println("Reasons:")
+	println()
+	println("Reasons:")
 	for _, reason := range reasons {
-		fmt.Printf("  %s: %d\n", reason, report.Reasons[reason])
+		printf("  %s: %d\n", reason, report.Reasons[reason])
 	}
+	return err
+}
+
+func reportToString(report Report) (string, error) {
+	var buf bytes.Buffer
+	if err := printReport(&buf, report); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func writeReportToBoth(report Report, path string) (err error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create report file %s: %w", path, err)
+	}
+	defer func() {
+		cerr := f.Close()
+		if cerr != nil {
+			err = errors.Join(err, fmt.Errorf("close report file %s: %w", path, cerr))
+		}
+	}()
+
+	err = printReport(io.MultiWriter(os.Stdout, f), report)
+	if err != nil {
+		return fmt.Errorf("write report to %s: %w", path, err)
+	}
+	return nil
 }
 
 func getTimeout() (time.Duration, error) {

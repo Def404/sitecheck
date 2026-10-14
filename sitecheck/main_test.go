@@ -95,7 +95,7 @@ func TestCheckHTTPStatus(t *testing.T) {
 				Timeout: time.Second,
 			}
 
-			result := check(client, server.URL)
+			result := check(client, server.URL, fakeResolver)
 
 			if result.StatusCode != tt.statusCode {
 				t.Errorf("StatusCode = %d, want %d", result.StatusCode, tt.statusCode)
@@ -127,7 +127,7 @@ func TestCheckTimeout(t *testing.T) {
 		Timeout: 50 * time.Millisecond,
 	}
 
-	result := check(client, server.URL)
+	result := check(client, server.URL, fakeResolver)
 
 	if result.Up {
 		t.Errorf("Up = %v, want false", result.Up)
@@ -143,6 +143,38 @@ func TestCheckTimeout(t *testing.T) {
 	}
 	if result.Duration <= 0 {
 		t.Errorf("Duration = %v, want > 0", result.Duration)
+	}
+}
+
+func TestCheckDNSFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := &http.Client{
+		Timeout: time.Second,
+	}
+
+	result := check(client, server.URL, failingResolver)
+
+	if !result.Up {
+		t.Errorf("Up = %v, want true", result.Up)
+	}
+	if result.StatusCode != http.StatusOK {
+		t.Errorf("StatusCode = %d, want %d", result.StatusCode, http.StatusOK)
+	}
+	if result.Err != nil {
+		t.Errorf("Err = %v, want nil", result.Err)
+	}
+	if result.Reason != "" {
+		t.Errorf("Reason = %q, want empty", result.Reason)
+	}
+	if len(result.IPs) != 0 {
+		t.Errorf("IPs = %#v, want empty", result.IPs)
+	}
+	if result.DNSErr == nil {
+		t.Error("DNSErr = nil, want error")
 	}
 }
 

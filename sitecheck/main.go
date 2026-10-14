@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -15,14 +16,16 @@ import (
 )
 
 type Result struct {
-	URL        string
-	StatusCode int
-	Up         bool
-	Duration   time.Duration
-	Err        error
-	Reason     string
-	IPs        []string
-	DNSErr     error
+	URL          string
+	StatusCode   int
+	Up           bool
+	Duration     time.Duration
+	Err          error
+	Reason       string
+	IPs          []string
+	DNSErr       error
+	TLSExpiresAt time.Time
+	TLSErr       error
 }
 
 func main() {
@@ -59,7 +62,7 @@ func run(args []string) error {
 	for _, url := range urls {
 		fmt.Printf("Checking: %s\n", url)
 
-		result := check(client, url)
+		result := check(client, url, resolveIPs)
 
 		if result.Up {
 			upCount++
@@ -110,7 +113,7 @@ func loadURLs(path string) ([]string, error) {
 	return lines, nil
 }
 
-func check(client *http.Client, url string) Result {
+func check(client *http.Client, url string, resolve func(string) ([]string, error)) Result {
 
 	result := Result{
 		URL: url,
@@ -139,7 +142,15 @@ func check(client *http.Client, url string) Result {
 		result.Reason = statusReason(resp.StatusCode)
 	}
 
-	result.IPs, result.DNSErr = resolveIPs(u.Hostname())
+	result.IPs, result.DNSErr = resolve(u.Hostname())
+
+	if u.Scheme == "https" {
+		port := u.Port()
+		if port == "" {
+			port = "443"
+		}
+		result.TLSExpiresAt, result.TLSErr = getTLSExpiration(u.Hostname(), port)
+	}
 
 	return result
 }
@@ -216,6 +227,19 @@ func isTLSError(err error) bool {
 	return false
 }
 
+func isExpiredCertificate(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var invalid x509.CertificateInvalidError
+	if errors.As(err, &invalid) && invalid.Reason == x509.Expired {
+		return true
+	}
+
+	return false
+}
+
 func resolveIPs(host string) ([]string, error) {
 	ips, err := net.LookupIP(host)
 
@@ -229,6 +253,44 @@ func resolveIPs(host string) ([]string, error) {
 	}
 
 	return addrs, nil
+}
+
+func getTLSExpiration(host string, port string) (time.Time, error) {
+
+	conn, err := tls.DialWithDialer(
+		&net.Dialer{Timeout: 5 * time.Second},
+		"tcp",
+		net.JoinHostPort(host, port),
+		&tls.Config{
+			ServerName: host,
+		},
+	)
+
+	if err != nil {
+		return time.Time{}, fmt.Errorf("TLS connection to %s: %w", host, err)
+	}
+
+	defer conn.Close()
+
+	certs := conn.ConnectionState().PeerCertificates
+
+	if len(certs) == 0 {
+		return time.Time{}, fmt.Errorf("TLS connection to %s: %w", host, err)
+	}
+
+	return certs[0].NotAfter, nil
+}
+
+func daysUntilExpiration(expiresAt time.Time) int {
+	remaining := time.Until(expiresAt)
+
+	days := int(remaining / (24 * time.Hour))
+
+	if days < 0 {
+		return 0
+	}
+
+	return days
 }
 
 func statusReason(statusCode int) string {
@@ -264,6 +326,26 @@ func errorReason(err error) string {
 	return "request failed"
 }
 
+func tlsStatus(expiresAt time.Time, err error) string {
+	if err != nil && isExpiredCertificate(err) {
+		return "EXPIRED"
+	}
+
+	if err != nil {
+		return "ERROR"
+	}
+
+	if expiresAt.IsZero() {
+		return "UNKNOWN"
+	}
+
+	if time.Until(expiresAt) < 7*24*time.Hour {
+		return "WARNING"
+	}
+
+	return "OK"
+}
+
 func printResult(result Result) {
 	if result.StatusCode == 0 {
 		fmt.Println("\tStatus: -")
@@ -275,6 +357,23 @@ func printResult(result Result) {
 		fmt.Printf("\tState: UP\n")
 	} else {
 		fmt.Printf("\tState: DOWN\n")
+	}
+
+	if u, err := parseURL(result.URL); err == nil && u.Scheme == "https" {
+		status := tlsStatus(result.TLSExpiresAt, result.TLSErr)
+
+		fmt.Printf("\tTLS: %s\n", status)
+
+		switch status {
+		case "ERROR", "EXPIRED":
+			fmt.Printf("\tTLS error: %s\n", result.TLSErr)
+		case "UNKNOWN":
+			fmt.Printf("\tCertificate information unavailable\n")
+		case "OK", "WARNING":
+			fmt.Printf("\tCertificate expires: %s\n", result.TLSExpiresAt.Format(time.DateOnly))
+			fmt.Printf("\tDays remaining: %d\n", daysUntilExpiration(result.TLSExpiresAt))
+
+		}
 	}
 
 	fmt.Printf("\tDuration: %d ms\n", result.Duration.Milliseconds())
@@ -289,7 +388,7 @@ func printResult(result Result) {
 
 	if len(result.IPs) != 0 {
 
-		fmt.Printf("\tIPS:\n")
+		fmt.Printf("\tIP addresses:\n")
 		for _, ip := range result.IPs {
 			fmt.Printf("\t\t- %s\n", ip)
 		}

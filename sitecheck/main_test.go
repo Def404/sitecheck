@@ -11,6 +11,58 @@ import (
 	"time"
 )
 
+func TestParseArgs(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		wantFilename   string
+		wantJSONOutput bool
+		wantOutputFile string
+		wantErr        string
+	}{
+		{name: "filename", args: []string{"sites.txt"}, wantFilename: "sites.txt"},
+		{name: "json and filename", args: []string{"--json", "sites.txt"}, wantFilename: "sites.txt", wantJSONOutput: true},
+		{name: "json output and filename", args: []string{"--json", "--output", "report.json", "sites.txt"}, wantFilename: "sites.txt", wantJSONOutput: true, wantOutputFile: "report.json"},
+		{name: "no args", args: []string{}, wantErr: "filename is required"},
+		{name: "json without filename", args: []string{"--json"}, wantErr: "filename is required"},
+		{name: "unknown flag", args: []string{"--unknown", "sites.txt"}, wantErr: "flag provided but not defined: -unknown"},
+		{name: "two filenames", args: []string{"a.txt", "b.txt"}, wantErr: "too many arguments"},
+		{name: "unknown flag after json", args: []string{"--json", "--unknown"}, wantErr: "flag provided but not defined: -unknown"},
+		{name: "empty filename", args: []string{""}, wantErr: "filename is required"},
+		{name: "json and empty filename", args: []string{"--json", ""}, wantErr: "filename is required"},
+		{name: "three filenames", args: []string{"a.txt", "b.txt", "c.txt"}, wantErr: "too many arguments"},
+		{name: "output without json", args: []string{"--output", "report.json", "sites.txt"}, wantErr: "--output requires --json"},
+		{name: "json output without filename", args: []string{"--json", "--output", "report.json"}, wantErr: "filename is required"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filename, jsonOutput, outputFile, err := parseArgs(tt.args)
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("parseArgs(%q) = %q, %v, %q, nil; want error %q", tt.args, filename, jsonOutput, outputFile, tt.wantErr)
+				}
+				if err.Error() != tt.wantErr {
+					t.Errorf("error = %q, want %q", err.Error(), tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseArgs(%q) error = %v, want nil", tt.args, err)
+			}
+			if filename != tt.wantFilename {
+				t.Errorf("filename = %q, want %q", filename, tt.wantFilename)
+			}
+			if jsonOutput != tt.wantJSONOutput {
+				t.Errorf("jsonOutput = %v, want %v", jsonOutput, tt.wantJSONOutput)
+			}
+			if outputFile != tt.wantOutputFile {
+				t.Errorf("outputFile = %q, want %q", outputFile, tt.wantOutputFile)
+			}
+		})
+	}
+}
+
 func TestIsUp(t *testing.T) {
 	tests := []struct {
 		statusCode int

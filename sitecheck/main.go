@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -28,6 +31,14 @@ type Result struct {
 	TLSErr       error
 }
 
+type JSONResult struct {
+	URL        string `json:"url"`
+	StatusCode int    `json:"status_code"`
+	Up         bool   `json:"up"`
+	DurationMS int64  `json:"duration_ms"`
+	Reason     string `json:"reason"`
+}
+
 func main() {
 
 	err := run(os.Args[1:])
@@ -40,13 +51,15 @@ func main() {
 
 func run(args []string) error {
 
-	if len(args) != 1 {
-		return fmt.Errorf("path is required")
+	path, jsonOutput, outputFile, err := parseArgs(args)
+
+	if err != nil {
+		return err
 	}
 
-	urls, err := loadURLs(args[0])
+	urls, err := loadURLs(path)
 	if err != nil {
-		return fmt.Errorf("load urls from %s: %w", args[0], err)
+		return fmt.Errorf("load urls from %s: %w", path, err)
 	}
 
 	client := &http.Client{
@@ -59,25 +72,70 @@ func run(args []string) error {
 	upCount := 0
 	downCount := 0
 
+	results := make([]Result, 0, len(urls))
+
 	for _, url := range urls {
-		fmt.Printf("Checking: %s\n", url)
 
 		result := check(client, url, resolveIPs)
+		results = append(results, result)
 
 		if result.Up {
 			upCount++
 		} else {
 			downCount++
 		}
-
-		printResult(result)
-
-		fmt.Println()
 	}
 
-	fmt.Printf("Summary: %d UP / %d DOWN\n", upCount, downCount)
+	switch {
+	case !jsonOutput:
+		for _, res := range results {
+			fmt.Printf("Checking: %s\n", res.URL)
+			printResult(res)
+			fmt.Println()
+		}
+
+		fmt.Printf("Summary: %d UP / %d DOWN\n", upCount, downCount)
+	case outputFile == "":
+		err := printJSONResults(results)
+		if err != nil {
+			return err
+		}
+	default:
+		err := saveJSONResults(outputFile, results)
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
+}
+
+func parseArgs(args []string) (filename string, jsonOutput bool, outputFile string, err error) {
+	fs := flag.NewFlagSet("sitecheck", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	json := fs.Bool("json", false, "output results as JSON")
+	output := fs.String("output", "", "write JSON report to this file")
+
+	if err := fs.Parse(args); err != nil {
+		return "", false, "", err
+	}
+
+	rest := fs.Args()
+	if len(rest) != 1 {
+		if len(rest) == 0 {
+			return "", false, "", errors.New("filename is required")
+		}
+		return "", false, "", errors.New("too many arguments")
+	}
+	if rest[0] == "" {
+		return "", false, "", errors.New("filename is required")
+	}
+	if *output != "" && !*json {
+		return "", false, "", errors.New("--output requires --json")
+	}
+
+	return rest[0], *json, *output, nil
 }
 
 func loadURLs(path string) ([]string, error) {
@@ -397,4 +455,56 @@ func printResult(result Result) {
 	if result.DNSErr != nil {
 		fmt.Printf("\tDNS Error: %v\n", result.DNSErr)
 	}
+}
+
+func marshalResults(results []Result) ([]byte, error) {
+	jsonResults := make([]JSONResult, 0, len(results))
+	for _, result := range results {
+		jsonResults = append(jsonResults, toJSONResult(result))
+	}
+
+	return json.MarshalIndent(jsonResults, "", "  ")
+}
+
+func toJSONResult(result Result) JSONResult {
+	return JSONResult{
+		URL:        result.URL,
+		StatusCode: result.StatusCode,
+		Up:         result.Up,
+		DurationMS: result.Duration.Milliseconds(),
+		Reason:     result.Reason,
+	}
+}
+
+func printJSON(result Result) error {
+	data, err := json.MarshalIndent(toJSONResult(result), "", "  ")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(data))
+	return nil
+}
+
+func printJSONResults(results []Result) error {
+	data, err := marshalResults(results)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(data))
+	return nil
+}
+
+func saveJSON(filename string, data []byte) error {
+	return os.WriteFile(filename, data, 0o644)
+}
+
+func saveJSONResults(filename string, results []Result) error {
+	data, err := marshalResults(results)
+	if err != nil {
+		return err
+	}
+
+	return saveJSON(filename, data)
 }

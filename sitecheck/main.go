@@ -103,7 +103,7 @@ func run(args []string) error {
 	default:
 		err := saveJSONResults(outputFile, results)
 		if err != nil {
-			return err
+			return fmt.Errorf("save JSON report to %s: %w", outputFile, err)
 		}
 	}
 

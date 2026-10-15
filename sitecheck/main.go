@@ -15,11 +15,20 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"os/user"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
 	"time"
 )
+
+type SystemInfo struct {
+	Hostname string `json:"hostname"`
+	Username string `json:"username"`
+	OS       string `json:"os"`
+}
 
 type Result struct {
 	URL          string
@@ -51,6 +60,7 @@ type JSONResult struct {
 }
 
 type Report struct {
+	System    SystemInfo
 	Results   []Result
 	Total     int
 	UpCount   int
@@ -59,6 +69,7 @@ type Report struct {
 }
 
 type JSONReport struct {
+	System  SystemInfo     `json:"system"`
 	Total   int            `json:"total"`
 	Up      int            `json:"up"`
 	Down    int            `json:"down"`
@@ -111,6 +122,11 @@ func run(args []string) error {
 		},
 	}
 
+	sysInfo, err := getSystemInfo()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not get system info: %s\n", err)
+	}
+
 	results := make([]Result, 0, len(urls))
 
 	for _, url := range urls {
@@ -118,9 +134,11 @@ func run(args []string) error {
 		results = append(results, result)
 	}
 
+	report := buildReport(sysInfo, results)
+
 	switch {
 	case opts.JSONReport:
-		data, err := marshalReport(buildReport(results))
+		data, err := marshalReport(report)
 		if err != nil {
 			return err
 		}
@@ -139,14 +157,6 @@ func run(args []string) error {
 			return fmt.Errorf("save JSON report to %s: %w", opts.OutputFile, err)
 		}
 	default:
-		report := buildReport(results)
-
-		for _, res := range results {
-			fmt.Printf("Checking: %s\n", res.URL)
-			printResult(res)
-			fmt.Println()
-		}
-
 		if opts.TextOutput == "" {
 			if err := printReport(os.Stdout, report); err != nil {
 				return err
@@ -205,6 +215,90 @@ func parseArgs(args []string) (Options, error) {
 		OutputFile: *output,
 		TextOutput: *textOutput,
 	}, nil
+}
+
+func getSystemInfo() (SystemInfo, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return SystemInfo{}, fmt.Errorf("get hostname: %w", err)
+	}
+
+	currentUser, err := user.Current()
+	if err != nil {
+		return SystemInfo{}, fmt.Errorf("get current user: %w", err)
+	}
+
+	OS, err := getOSName()
+
+	if err != nil {
+		return SystemInfo{}, fmt.Errorf("get OS name: %w", err)
+	}
+
+	return SystemInfo{
+		Hostname: hostname,
+		Username: currentUser.Username,
+		OS:       OS,
+	}, nil
+}
+
+func getOSName() (string, error) {
+	switch runtime.GOOS {
+	case "linux":
+		return getLinuxOSName()
+	case "windows":
+		return getWindowsOSName()
+	case "darwin":
+		return getMacOSName()
+	default:
+		return "", fmt.Errorf("unknown platform: %s", runtime.GOOS)
+	}
+}
+
+func getLinuxOSName() (string, error) {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return "", fmt.Errorf("read /etc/os-release: %w", err)
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "PRETTY_NAME=") {
+			value := strings.TrimPrefix(line, "PRETTY_NAME=")
+			return strings.Trim(value, `"`), nil
+		}
+	}
+
+	return "", errors.New("PRETTY_NAME not found in /etc/os-release")
+}
+
+func getMacOSName() (string, error) {
+	out, err := exec.Command("sw_vers", "-productVersion").Output()
+	if err != nil {
+		return "", fmt.Errorf("run sw_vers: %w", err)
+	}
+
+	version := strings.TrimSpace(string(out))
+
+	if version == "" {
+		return "", errors.New("sw_vers returned empty version")
+	}
+
+	return fmt.Sprintf("macOS %s", version), nil
+}
+
+func getWindowsOSName() (string, error) {
+	cmd := `Get-CimInstance Win32_OperatingSystem | Select-Object -ExpandProperty Caption`
+	out, err := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", cmd).Output()
+	if err != nil {
+		return "", fmt.Errorf("run powershell: %w", err)
+	}
+
+	name := strings.TrimSpace(string(out))
+	if name == "" {
+		return "", errors.New("powershell returned empty OS name")
+	}
+
+	return name, nil
 }
 
 func loadURLs(path string) ([]string, error) {
@@ -485,54 +579,64 @@ func tlsStatus(expiresAt time.Time, err error) string {
 	return "OK"
 }
 
-func printResult(result Result) {
+func printResult(w io.Writer, result Result) error {
+	var err error
+	printf := func(format string, args ...any) {
+		if err != nil {
+			return
+		}
+		_, err = fmt.Fprintf(w, format, args...)
+	}
+
 	if result.StatusCode == 0 {
-		fmt.Println("\tStatus: -")
+		printf("\tStatus: -\n")
 	} else {
-		fmt.Printf("\tStatus: %d\n", result.StatusCode)
+		printf("\tStatus: %d\n", result.StatusCode)
 	}
 
 	state := result.State()
-	fmt.Printf("\tState: %s\n", state)
+	printf("\tState: %s\n", state)
 
-	if u, err := parseURL(result.URL); err == nil && u.Scheme == "https" {
+	if u, perr := parseURL(result.URL); perr == nil && u.Scheme == "https" {
 		status := tlsStatus(result.TLSExpiresAt, result.TLSErr)
 
-		fmt.Printf("\tTLS: %s\n", status)
+		printf("\tTLS: %s\n", status)
 
 		switch status {
-		case "ERROR", "EXPIRED":
-			fmt.Printf("\tTLS error: %s\n", result.TLSErr)
+		case "ERROR":
+			printf("\tTLS error: %s\n", result.TLSErr)
+		case "EXPIRED":
+			printf("\tCertificate expired: %s\n", result.TLSExpiresAt.Format(time.DateOnly))
 		case "UNKNOWN":
-			fmt.Printf("\tCertificate information unavailable\n")
+			printf("\tCertificate information unavailable\n")
 		case "OK", "WARNING":
-			fmt.Printf("\tCertificate expires: %s\n", result.TLSExpiresAt.Format(time.DateOnly))
-			fmt.Printf("\tDays remaining: %d\n", daysUntilExpiration(result.TLSExpiresAt))
-
+			printf("\tCertificate expires: %s\n", result.TLSExpiresAt.Format(time.DateOnly))
+			printf("\tDays remaining: %d\n", daysUntilExpiration(result.TLSExpiresAt))
 		}
 	}
 
-	fmt.Printf("\tDuration: %d ms\n", result.Duration.Milliseconds())
+	printf("\tDuration: %d ms\n", result.Duration.Milliseconds())
 
 	if result.Err != nil {
-		fmt.Printf("\tError: %s\n", result.Err)
+		printf("\tError: %s\n", result.Err)
 	}
 
 	if result.Reason != "" {
-		fmt.Printf("\tReason: %s\n", result.Reason)
+		printf("\tReason: %s\n", result.Reason)
 	}
 
 	if len(result.IPs) != 0 {
-
-		fmt.Printf("\tIP addresses:\n")
+		printf("\tIP addresses:\n")
 		for _, ip := range result.IPs {
-			fmt.Printf("\t\t- %s\n", ip)
+			printf("\t\t- %s\n", ip)
 		}
 	}
 
 	if result.DNSErr != nil {
-		fmt.Printf("\tDNS Error: %v\n", result.DNSErr)
+		printf("\tDNS Error: %v\n", result.DNSErr)
 	}
+
+	return err
 }
 
 func marshalResults(results []Result) ([]byte, error) {
@@ -561,6 +665,7 @@ func toJSONReport(report Report) JSONReport {
 	}
 
 	return JSONReport{
+		System:  report.System,
 		Total:   report.Total,
 		Up:      report.UpCount,
 		Down:    report.DownCount,
@@ -606,6 +711,20 @@ func saveJSONResults(filename string, results []Result) error {
 	return saveJSON(filename, data)
 }
 
+func printSystemInfo(w io.Writer, system SystemInfo) error {
+	_, err := fmt.Fprintf(w, "[СИСТЕМА]\n")
+	if err != nil {
+		return err
+	}
+
+	if _, err = fmt.Fprintf(w, "  OS: %s\n", system.OS); err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(w, "  User: %s@%s\n", system.Username, system.Hostname)
+	return err
+}
+
 func printReport(w io.Writer, report Report) error {
 	var err error
 	println := func(args ...any) {
@@ -619,6 +738,26 @@ func printReport(w io.Writer, report Report) error {
 			return
 		}
 		_, err = fmt.Fprintf(w, format, args...)
+	}
+
+	if err = printSystemInfo(w, report.System); err != nil {
+		return err
+	}
+
+	println()
+
+	for _, res := range report.Results {
+		if err != nil {
+			return err
+		}
+		printf("Checking: %s\n", res.URL)
+		if err != nil {
+			return err
+		}
+		if err = printResult(w, res); err != nil {
+			return err
+		}
+		println()
 	}
 
 	println("Summary")
@@ -702,7 +841,7 @@ func countReasons(results []Result) map[string]int {
 	return counts
 }
 
-func buildReport(results []Result) Report {
+func buildReport(system SystemInfo, results []Result) Report {
 
 	total := len(results)
 	upCount := 0
@@ -714,6 +853,7 @@ func buildReport(results []Result) Report {
 	}
 
 	return Report{
+		System:    system,
 		Results:   results,
 		Total:     total,
 		UpCount:   upCount,

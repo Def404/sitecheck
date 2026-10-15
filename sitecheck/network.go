@@ -18,44 +18,79 @@ type InterfaceInfo struct {
 }
 
 type NetworkInfo struct {
-	PrimaryIP string      `json:"primary_ip"`
-	LocalIP   string      `json:"local_ip"`
-	Gateway   GatewayInfo `json:"gateway"`
-	LocalIPs  []string    `json:"local_ips"`
-	LANError  string      `json:"lan_error,omitempty"`
+	PrimaryIP     string          `json:"primary_ip"`
+	LocalIP       string          `json:"local_ip"`
+	Gateway       GatewayInfo     `json:"gateway"`
+	LocalIPs      []string        `json:"local_ips"`
+	LANError      string          `json:"lan_error,omitempty"`
+	DNSServers    []string        `json:"dns_servers,omitempty"`
+	DNSError      string          `json:"dns_error,omitempty"`
+	DNSInterfaces []InterfaceDNS  `json:"dns_interfaces,omitempty"`
+	VPNInterfaces []InterfaceInfo `json:"vpn_interfaces,omitempty"`
 }
 
 func getNetworkInfo() (NetworkInfo, error) {
+	info := NetworkInfo{}
+
 	primaryIP, err := getPrimaryLocalIP()
 	if err != nil {
-		return NetworkInfo{}, fmt.Errorf("get primary local IP: %w", err)
+		return info, fmt.Errorf("get primary local IP: %w", err)
 	}
+	info.PrimaryIP = primaryIP
 
 	localIPs, err := getLocalIPs()
 	if err != nil {
-		return NetworkInfo{}, fmt.Errorf("get local IPs: %w", err)
+		return info, fmt.Errorf("get local IPs: %w", err)
 	}
+	info.LocalIPs = localIPs
 
 	interfaces, err := getIPv4Interfaces()
 	if err != nil {
-		return NetworkInfo{}, fmt.Errorf("get IPv4 interfaces: %w", err)
+		return info, fmt.Errorf("get IPv4 interfaces: %w", err)
 	}
+	info.VPNInterfaces = getVPNInterfaces(interfaces)
 
 	localIP, gateway, err := getLANInfo(interfaces)
 	if err != nil {
-		return NetworkInfo{
-			PrimaryIP: primaryIP,
-			LocalIPs:  localIPs,
-			LANError:  err.Error(),
-		}, nil
+		info.LANError = err.Error()
+	} else {
+		info.LocalIP = localIP
+		info.Gateway = gateway
 	}
 
-	return NetworkInfo{
-		PrimaryIP: primaryIP,
-		LocalIP:   localIP,
-		Gateway:   gateway,
-		LocalIPs:  localIPs,
-	}, nil
+	if runtime.GOOS == "linux" {
+		if ifaces, err := getLinuxDNSInfo(); err != nil {
+			info.DNSError = err.Error()
+		} else {
+			info.DNSInterfaces = ifaces
+			info.DNSServers = collectDNSServers(ifaces)
+		}
+	} else {
+		dnsServers, err := getDNSServers()
+		if err != nil {
+			info.DNSError = err.Error()
+		} else {
+			info.DNSServers = dnsServers
+		}
+	}
+
+	return info, nil
+}
+
+func collectDNSServers(ifaces []InterfaceDNS) []string {
+	var servers []string
+	seen := make(map[string]bool)
+
+	for _, iface := range ifaces {
+		for _, ip := range iface.Servers {
+			if !seen[ip] {
+				seen[ip] = true
+				servers = append(servers, ip)
+			}
+		}
+	}
+
+	return servers
 }
 
 func classifyInterface(name string) string {
@@ -68,6 +103,16 @@ func classifyInterface(name string) string {
 	}
 
 	return "unknown"
+}
+
+func getVPNInterfaces(interfaces []InterfaceInfo) []InterfaceInfo {
+	var vpn []InterfaceInfo
+	for _, iface := range interfaces {
+		if iface.Type == "vpn" {
+			vpn = append(vpn, iface)
+		}
+	}
+	return vpn
 }
 
 func getIPv4Interfaces() ([]InterfaceInfo, error) {

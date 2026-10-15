@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -93,6 +94,40 @@ func printNetworkInfo(w io.Writer, network NetworkInfo) error {
 	} else {
 		if _, err = fmt.Fprintf(w, "  Шлюз:          %s (%s)\n", network.Gateway.IP, network.Gateway.Interface); err != nil {
 			return err
+		}
+	}
+
+	if network.DNSError != "" {
+		if _, err = fmt.Fprintf(w, "  DNS-серверы:   недоступны (%s)\n", network.DNSError); err != nil {
+			return err
+		}
+	} else if len(network.DNSInterfaces) > 0 {
+		if _, err = fmt.Fprintf(w, "  DNS-серверы:\n"); err != nil {
+			return err
+		}
+		for _, dnsIf := range network.DNSInterfaces {
+			if _, err = fmt.Fprintf(w, "    %s:      %s\n", dnsIf.Interface, strings.Join(dnsIf.Servers, ", ")); err != nil {
+				return err
+			}
+		}
+	} else {
+		if _, err = fmt.Fprintf(w, "  DNS-серверы:   %s\n", strings.Join(network.DNSServers, ", ")); err != nil {
+			return err
+		}
+	}
+
+	if len(network.VPNInterfaces) == 0 {
+		if _, err = fmt.Fprintf(w, "  VPN:           не обнаружен\n"); err != nil {
+			return err
+		}
+	} else {
+		if _, err = fmt.Fprintf(w, "  VPN:\n"); err != nil {
+			return err
+		}
+		for _, vpnIf := range network.VPNInterfaces {
+			if _, err = fmt.Fprintf(w, "    %-12s %s\n", vpnIf.Name+":", vpnIf.IP); err != nil {
+				return err
+			}
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -316,4 +317,59 @@ func fakeResolver(ctx context.Context, host string) ([]string, error) {
 
 func failingResolver(ctx context.Context, host string) ([]string, error) {
 	return nil, fmt.Errorf("resolve %s: dns failure", host)
+}
+
+func TestGetVPNInterfaces(t *testing.T) {
+	tests := []struct {
+		name       string
+		interfaces []InterfaceInfo
+		want       []InterfaceInfo
+	}{
+		{
+			name: "no VPN interfaces",
+			interfaces: []InterfaceInfo{
+				{Name: "wlp3s0", IP: "192.168.1.144", Type: "unknown"},
+				{Name: "lo", IP: "127.0.0.1", Type: "unknown"},
+			},
+			want: nil,
+		},
+		{
+			name: "one VPN interface",
+			interfaces: []InterfaceInfo{
+				{Name: "wlp3s0", IP: "192.168.1.144", Type: "unknown"},
+				{Name: "amn0", IP: "10.8.1.17", Type: "vpn"},
+				{Name: "docker0", IP: "172.17.0.1", Type: "virtual"},
+			},
+			want: []InterfaceInfo{
+				{Name: "amn0", IP: "10.8.1.17", Type: "vpn"},
+			},
+		},
+		{
+			name: "multiple VPN interfaces, order preserved",
+			interfaces: []InterfaceInfo{
+				{Name: "wlp3s0", IP: "192.168.1.144", Type: "unknown"},
+				{Name: "amn0", IP: "10.8.1.17", Type: "vpn"},
+				{Name: "eth0", IP: "192.168.0.100", Type: "unknown"},
+				{Name: "tun0", IP: "10.9.0.1", Type: "vpn"},
+			},
+			want: []InterfaceInfo{
+				{Name: "amn0", IP: "10.8.1.17", Type: "vpn"},
+				{Name: "tun0", IP: "10.9.0.1", Type: "vpn"},
+			},
+		},
+		{
+			name:       "empty input",
+			interfaces: nil,
+			want:       nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getVPNInterfaces(tt.interfaces)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getVPNInterfaces() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

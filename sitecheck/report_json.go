@@ -15,12 +15,13 @@ type JSONResult struct {
 }
 
 type JSONReport struct {
-	System  SystemInfo     `json:"system"`
-	Total   int            `json:"total"`
-	Up      int            `json:"up"`
-	Down    int            `json:"down"`
-	Reasons map[string]int `json:"reasons"`
-	Results []JSONResult   `json:"results"`
+	System   SystemInfo     `json:"system"`
+	Network  NetworkInfo    `json:"network"`
+	Total    int            `json:"total"`
+	Up       int            `json:"up"`
+	Down     int            `json:"down"`
+	Reasons  map[string]int `json:"reasons"`
+	Results  []JSONResult   `json:"results"`
 }
 
 func toJSONResult(result Result) JSONResult {
@@ -40,12 +41,13 @@ func toJSONReport(report Report) JSONReport {
 	}
 
 	return JSONReport{
-		System:  report.System,
-		Total:   report.Total,
-		Up:      report.UpCount,
-		Down:    report.DownCount,
-		Reasons: report.Reasons,
-		Results: results,
+		System:   report.System,
+		Network:  report.Network,
+		Total:    report.Total,
+		Up:       report.UpCount,
+		Down:     report.DownCount,
+		Reasons:  report.Reasons,
+		Results:  results,
 	}
 }
 

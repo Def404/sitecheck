@@ -35,6 +35,11 @@ func run(args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: could not get system info: %s\n", err)
 	}
 
+	netInfo, err := getNetworkInfo()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not get network info: %s\n", err)
+	}
+
 	results := make([]Result, 0, len(urls))
 
 	for _, url := range urls {
@@ -42,7 +47,7 @@ func run(args []string) error {
 		results = append(results, result)
 	}
 
-	report := buildReport(sysInfo, results)
+	report := buildReport(sysInfo, netInfo, results)
 
 	switch {
 	case opts.JSONReport:

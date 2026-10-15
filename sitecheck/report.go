@@ -2,6 +2,7 @@ package main
 
 type Report struct {
 	System    SystemInfo
+	Network   NetworkInfo
 	Results   []Result
 	Total     int
 	UpCount   int
@@ -9,7 +10,7 @@ type Report struct {
 	Reasons   map[string]int
 }
 
-func buildReport(system SystemInfo, results []Result) Report {
+func buildReport(system SystemInfo, network NetworkInfo, results []Result) Report {
 	total := len(results)
 	upCount := 0
 
@@ -21,6 +22,7 @@ func buildReport(system SystemInfo, results []Result) Report {
 
 	return Report{
 		System:    system,
+		Network:   network,
 		Results:   results,
 		Total:     total,
 		UpCount:   upCount,

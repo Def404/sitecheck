@@ -70,6 +70,46 @@ func printResult(w io.Writer, result Result) error {
 	return err
 }
 
+func printNetworkInfo(w io.Writer, network NetworkInfo) error {
+	_, err := fmt.Fprintf(w, "[СЕТЬ]\n")
+	if err != nil {
+		return err
+	}
+
+	if network.LocalIP != "" {
+		if _, err = fmt.Fprintf(w, "  Локальный IP:  %s\n", network.LocalIP); err != nil {
+			return err
+		}
+	}
+
+	if _, err = fmt.Fprintf(w, "  Исходящий IP:  %s\n", network.PrimaryIP); err != nil {
+		return err
+	}
+
+	if network.LANError != "" {
+		if _, err = fmt.Fprintf(w, "  Шлюз:          недоступен (%s)\n", network.LANError); err != nil {
+			return err
+		}
+	} else {
+		if _, err = fmt.Fprintf(w, "  Шлюз:          %s (%s)\n", network.Gateway.IP, network.Gateway.Interface); err != nil {
+			return err
+		}
+	}
+
+	if _, err = fmt.Fprintf(w, "  Все IPv4:\n"); err != nil {
+		return err
+	}
+
+	for _, ip := range network.LocalIPs {
+		if _, err = fmt.Fprintf(w, "    - %s\n", ip); err != nil {
+			return err
+		}
+	}
+
+	_, err = fmt.Fprintf(w, "\n")
+	return err
+}
+
 func printSystemInfo(w io.Writer, system SystemInfo) error {
 	_, err := fmt.Fprintf(w, "[СИСТЕМА]\n")
 	if err != nil {
@@ -97,6 +137,10 @@ func printReport(w io.Writer, report Report) error {
 			return
 		}
 		_, err = fmt.Fprintf(w, format, args...)
+	}
+
+	if err = printNetworkInfo(w, report.Network); err != nil {
+		return err
 	}
 
 	if err = printSystemInfo(w, report.System); err != nil {

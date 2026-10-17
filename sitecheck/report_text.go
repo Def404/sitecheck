@@ -95,6 +95,20 @@ func printNetworkInfo(w io.Writer, network NetworkInfo) error {
 		if _, err = fmt.Fprintf(w, "  Шлюз:          %s (%s)\n", network.Gateway.IP, network.Gateway.Interface); err != nil {
 			return err
 		}
+
+		if network.GatewayPingError != "" {
+			if _, err = fmt.Fprintf(w, "  Ping шлюза:    ошибка: %s\n", network.GatewayPingError); err != nil {
+				return err
+			}
+		} else if network.GatewayPing.Success {
+			if _, err = fmt.Fprintf(w, "  Ping шлюза:    OK (%.2f ms)\n", network.GatewayPing.LatencyMS); err != nil {
+				return err
+			}
+		} else if network.GatewayPing.Ran {
+			if _, err = fmt.Fprintf(w, "  Ping шлюза:    FAIL\n"); err != nil {
+				return err
+			}
+		}
 	}
 
 	if network.DNSError != "" {

@@ -18,15 +18,17 @@ type InterfaceInfo struct {
 }
 
 type NetworkInfo struct {
-	PrimaryIP     string          `json:"primary_ip"`
-	LocalIP       string          `json:"local_ip"`
-	Gateway       GatewayInfo     `json:"gateway"`
-	LocalIPs      []string        `json:"local_ips"`
-	LANError      string          `json:"lan_error,omitempty"`
-	DNSServers    []string        `json:"dns_servers,omitempty"`
-	DNSError      string          `json:"dns_error,omitempty"`
-	DNSInterfaces []InterfaceDNS  `json:"dns_interfaces,omitempty"`
-	VPNInterfaces []InterfaceInfo `json:"vpn_interfaces,omitempty"`
+	PrimaryIP        string          `json:"primary_ip"`
+	LocalIP          string          `json:"local_ip"`
+	Gateway          GatewayInfo     `json:"gateway"`
+	LocalIPs         []string        `json:"local_ips"`
+	LANError         string          `json:"lan_error,omitempty"`
+	GatewayPing      PingResult      `json:"gateway_ping"`
+	GatewayPingError string          `json:"gateway_ping_error,omitempty"`
+	DNSServers       []string        `json:"dns_servers,omitempty"`
+	DNSError         string          `json:"dns_error,omitempty"`
+	DNSInterfaces    []InterfaceDNS  `json:"dns_interfaces,omitempty"`
+	VPNInterfaces    []InterfaceInfo `json:"vpn_interfaces,omitempty"`
 }
 
 func getNetworkInfo() (NetworkInfo, error) {
@@ -56,6 +58,15 @@ func getNetworkInfo() (NetworkInfo, error) {
 	} else {
 		info.LocalIP = localIP
 		info.Gateway = gateway
+
+		if gateway.IP != "" {
+			pingResult, pingErr := pingGateway(gateway.IP)
+			if pingErr != nil {
+				info.GatewayPingError = pingErr.Error()
+			} else {
+				info.GatewayPing = pingResult
+			}
+		}
 	}
 
 	if runtime.GOOS == "linux" {

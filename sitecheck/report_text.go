@@ -83,11 +83,21 @@ func printNetworkInfo(w io.Writer, network NetworkInfo) error {
 		}
 	}
 
-	if _, err = fmt.Fprintf(w, "  Исходящий IP:  %s\n", network.PrimaryIP); err != nil {
-		return err
+	if network.PrimaryIPError != "" {
+		if _, err = fmt.Fprintf(w, "  Исходящий IP:  недоступен (%s)\n", network.PrimaryIPError); err != nil {
+			return err
+		}
+	} else {
+		if _, err = fmt.Fprintf(w, "  Исходящий IP:  %s\n", network.PrimaryIP); err != nil {
+			return err
+		}
 	}
 
-	if network.LANError != "" {
+	if network.InterfacesError != "" {
+		if _, err = fmt.Fprintf(w, "  Шлюз:          невозможно определить (%s)\n", network.InterfacesError); err != nil {
+			return err
+		}
+	} else if network.LANError != "" {
 		if _, err = fmt.Fprintf(w, "  Шлюз:          недоступен (%s)\n", network.LANError); err != nil {
 			return err
 		}
@@ -130,11 +140,11 @@ func printNetworkInfo(w io.Writer, network NetworkInfo) error {
 		}
 	}
 
-	if len(network.VPNInterfaces) == 0 {
-		if _, err = fmt.Fprintf(w, "  VPN:           не обнаружен\n"); err != nil {
+	if network.InterfacesError != "" {
+		if _, err = fmt.Fprintf(w, "  VPN:           невозможно определить (%s)\n", network.InterfacesError); err != nil {
 			return err
 		}
-	} else {
+	} else if len(network.VPNInterfaces) > 0 {
 		if _, err = fmt.Fprintf(w, "  VPN:\n"); err != nil {
 			return err
 		}
@@ -143,14 +153,27 @@ func printNetworkInfo(w io.Writer, network NetworkInfo) error {
 				return err
 			}
 		}
+	} else {
+		if _, err = fmt.Fprintf(w, "  VPN:           не обнаружен\n"); err != nil {
+			return err
+		}
 	}
 
-	if _, err = fmt.Fprintf(w, "  Все IPv4:\n"); err != nil {
-		return err
-	}
-
-	for _, ip := range network.LocalIPs {
-		if _, err = fmt.Fprintf(w, "    - %s\n", ip); err != nil {
+	if network.LocalIPsError != "" {
+		if _, err = fmt.Fprintf(w, "  Все IPv4:     недоступны (%s)\n", network.LocalIPsError); err != nil {
+			return err
+		}
+	} else if len(network.LocalIPs) > 0 {
+		if _, err = fmt.Fprintf(w, "  Все IPv4:\n"); err != nil {
+			return err
+		}
+		for _, ip := range network.LocalIPs {
+			if _, err = fmt.Fprintf(w, "    - %s\n", ip); err != nil {
+				return err
+			}
+		}
+	} else {
+		if _, err = fmt.Fprintf(w, "  Все IPv4:     не обнаружены\n"); err != nil {
 			return err
 		}
 	}

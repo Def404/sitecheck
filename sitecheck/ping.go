@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type PingResult struct {
@@ -16,10 +18,15 @@ type PingResult struct {
 	Error     string  `json:"error,omitempty"`
 }
 
-func runLinuxPing(ip string) (string, error) {
-	cmd := exec.Command("ping", "-n", "-c", "1", "-W", "2", ip)
+func runLinuxPing(ctx context.Context, ip string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ping", "-n", "-c", "1", "-W", "2", ip)
 	out, err := cmd.CombinedOutput()
 	text := string(out)
+	if ctx.Err() != nil {
+		return text, fmt.Errorf("run ping -n -c 1 -W 2 %s: %w", ip, ctx.Err())
+	}
 	if err != nil {
 		return text, fmt.Errorf("run ping -n -c 1 -W 2 %s: %w", ip, err)
 	}
@@ -47,8 +54,8 @@ func parseLinuxPingLatency(output string) (float64, error) {
 	return latency, nil
 }
 
-func pingLinuxGateway(ip string) (PingResult, error) {
-	output, err := runLinuxPing(ip)
+func executePing(ctx context.Context, ip string, run func(context.Context, string) (string, error), parse func(string) (float64, error)) (PingResult, error) {
+	output, err := run(ctx, ip)
 	if err != nil {
 		if isPingExitError(err) {
 			msg := strings.TrimSpace(output)
@@ -59,17 +66,26 @@ func pingLinuxGateway(ip string) (PingResult, error) {
 		}
 		return PingResult{}, fmt.Errorf("ping gateway %s: %w", ip, err)
 	}
-	latency, err := parseLinuxPingLatency(output)
+	latency, err := parse(output)
 	if err != nil {
 		return PingResult{}, fmt.Errorf("parse ping gateway %s: %w", ip, err)
 	}
 	return PingResult{Ran: true, Success: true, LatencyMS: latency}, nil
 }
 
-func runMacOSPing(ip string) (string, error) {
-	cmd := exec.Command("ping", "-c", "1", "-W", "2000", ip)
+func pingLinuxGateway(ctx context.Context, ip string) (PingResult, error) {
+	return executePing(ctx, ip, runLinuxPing, parseLinuxPingLatency)
+}
+
+func runMacOSPing(ctx context.Context, ip string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ping", "-c", "1", "-W", "2000", ip)
 	out, err := cmd.CombinedOutput()
 	text := string(out)
+	if ctx.Err() != nil {
+		return text, fmt.Errorf("run ping -c 1 -W 2000 %s: %w", ip, ctx.Err())
+	}
 	if err != nil {
 		return text, fmt.Errorf("run ping -c 1 -W 2000 %s: %w", ip, err)
 	}
@@ -97,29 +113,19 @@ func parseMacOSPingLatency(output string) (float64, error) {
 	return 0, errors.New("ping output: no reply line found")
 }
 
-func pingMacOSGateway(ip string) (PingResult, error) {
-	output, err := runMacOSPing(ip)
-	if err != nil {
-		if isPingExitError(err) {
-			msg := strings.TrimSpace(output)
-			if msg == "" {
-				msg = err.Error()
-			}
-			return PingResult{Ran: true, Success: false, Error: msg}, nil
-		}
-		return PingResult{}, fmt.Errorf("ping gateway %s: %w", ip, err)
-	}
-	latency, err := parseMacOSPingLatency(output)
-	if err != nil {
-		return PingResult{}, fmt.Errorf("parse ping gateway %s: %w", ip, err)
-	}
-	return PingResult{Ran: true, Success: true, LatencyMS: latency}, nil
+func pingMacOSGateway(ctx context.Context, ip string) (PingResult, error) {
+	return executePing(ctx, ip, runMacOSPing, parseMacOSPingLatency)
 }
 
-func runWindowsPing(ip string) (string, error) {
-	cmd := exec.Command("ping", "-n", "1", "-w", "2000", ip)
+func runWindowsPing(ctx context.Context, ip string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "ping", "-n", "1", "-w", "2000", ip)
 	out, err := cmd.CombinedOutput()
 	text := string(out)
+	if ctx.Err() != nil {
+		return text, fmt.Errorf("run ping -n 1 -w 2000 %s: %w", ip, ctx.Err())
+	}
 	if err != nil {
 		return text, fmt.Errorf("run ping -n 1 -w 2000 %s: %w", ip, err)
 	}
@@ -160,33 +166,18 @@ func parseWindowsPingLatency(output string) (float64, error) {
 	return 0, errors.New("ping output: no reply line found")
 }
 
-func pingWindowsGateway(ip string) (PingResult, error) {
-	output, err := runWindowsPing(ip)
-	if err != nil {
-		if isPingExitError(err) {
-			msg := strings.TrimSpace(output)
-			if msg == "" {
-				msg = err.Error()
-			}
-			return PingResult{Ran: true, Success: false, Error: msg}, nil
-		}
-		return PingResult{}, fmt.Errorf("ping gateway %s: %w", ip, err)
-	}
-	latency, err := parseWindowsPingLatency(output)
-	if err != nil {
-		return PingResult{}, fmt.Errorf("parse ping gateway %s: %w", ip, err)
-	}
-	return PingResult{Ran: true, Success: true, LatencyMS: latency}, nil
+func pingWindowsGateway(ctx context.Context, ip string) (PingResult, error) {
+	return executePing(ctx, ip, runWindowsPing, parseWindowsPingLatency)
 }
 
-func pingGateway(ip string) (PingResult, error) {
+func pingGateway(ctx context.Context, ip string) (PingResult, error) {
 	switch runtime.GOOS {
 	case "linux":
-		return pingLinuxGateway(ip)
+		return pingLinuxGateway(ctx, ip)
 	case "darwin":
-		return pingMacOSGateway(ip)
+		return pingMacOSGateway(ctx, ip)
 	case "windows":
-		return pingWindowsGateway(ip)
+		return pingWindowsGateway(ctx, ip)
 	default:
 		return PingResult{}, fmt.Errorf("ping is not supported on %s", runtime.GOOS)
 	}

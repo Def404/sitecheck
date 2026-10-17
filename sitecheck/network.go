@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,9 +20,12 @@ type InterfaceInfo struct {
 
 type NetworkInfo struct {
 	PrimaryIP        string          `json:"primary_ip"`
+	PrimaryIPError   string          `json:"primary_ip_error,omitempty"`
 	LocalIP          string          `json:"local_ip"`
 	Gateway          GatewayInfo     `json:"gateway"`
 	LocalIPs         []string        `json:"local_ips"`
+	LocalIPsError    string          `json:"local_ips_error,omitempty"`
+	InterfacesError  string          `json:"interfaces_error,omitempty"`
 	LANError         string          `json:"lan_error,omitempty"`
 	GatewayPing      PingResult      `json:"gateway_ping"`
 	GatewayPingError string          `json:"gateway_ping_error,omitempty"`
@@ -31,40 +35,43 @@ type NetworkInfo struct {
 	VPNInterfaces    []InterfaceInfo `json:"vpn_interfaces,omitempty"`
 }
 
-func getNetworkInfo() (NetworkInfo, error) {
+func getNetworkInfo(ctx context.Context) (NetworkInfo, error) {
 	info := NetworkInfo{}
 
 	primaryIP, err := getPrimaryLocalIP()
 	if err != nil {
-		return info, fmt.Errorf("get primary local IP: %w", err)
+		info.PrimaryIPError = fmt.Sprintf("get primary local IP: %v", err)
+	} else {
+		info.PrimaryIP = primaryIP
 	}
-	info.PrimaryIP = primaryIP
 
 	localIPs, err := getLocalIPs()
 	if err != nil {
-		return info, fmt.Errorf("get local IPs: %w", err)
+		info.LocalIPsError = fmt.Sprintf("get local IPs: %v", err)
+	} else {
+		info.LocalIPs = localIPs
 	}
-	info.LocalIPs = localIPs
 
 	interfaces, err := getIPv4Interfaces()
 	if err != nil {
-		return info, fmt.Errorf("get IPv4 interfaces: %w", err)
-	}
-	info.VPNInterfaces = getVPNInterfaces(interfaces)
-
-	localIP, gateway, err := getLANInfo(interfaces)
-	if err != nil {
-		info.LANError = err.Error()
+		info.InterfacesError = fmt.Sprintf("get IPv4 interfaces: %v", err)
 	} else {
-		info.LocalIP = localIP
-		info.Gateway = gateway
+		info.VPNInterfaces = getVPNInterfaces(interfaces)
 
-		if gateway.IP != "" {
-			pingResult, pingErr := pingGateway(gateway.IP)
-			if pingErr != nil {
-				info.GatewayPingError = pingErr.Error()
-			} else {
-				info.GatewayPing = pingResult
+		localIP, gateway, lanErr := getLANInfo(interfaces)
+		if lanErr != nil {
+			info.LANError = lanErr.Error()
+		} else {
+			info.LocalIP = localIP
+			info.Gateway = gateway
+
+			if gateway.IP != "" {
+				pingResult, pingErr := pingGateway(ctx, gateway.IP)
+				if pingErr != nil {
+					info.GatewayPingError = pingErr.Error()
+				} else {
+					info.GatewayPing = pingResult
+				}
 			}
 		}
 	}

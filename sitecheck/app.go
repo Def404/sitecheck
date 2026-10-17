@@ -9,6 +9,8 @@ import (
 )
 
 func run(args []string) error {
+	ctx := context.Background()
+
 	opts, err := parseArgs(args)
 	if err != nil {
 		return err
@@ -35,7 +37,7 @@ func run(args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: could not get system info: %s\n", err)
 	}
 
-	netInfo, err := getNetworkInfo()
+	netInfo, err := getNetworkInfo(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not get network info: %s\n", err)
 	}

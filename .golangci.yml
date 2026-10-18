@@ -1,29 +1,24 @@
-# Конфигурация golangci-lint для sitecheck
+# Конфигурация golangci-lint v2 для sitecheck
 # Docs: https://golangci-lint.run/usage/configuration/
+
+version: "2"
 
 run:
   timeout: 5m
-  go: "1.24"
 
 # Пропускаем артефакты и каталоги с бинарниками
 issues:
   exclude-dirs:
     - dist
-  exclude-files:
-    - ".*_test.go$"
 
-linters:
-  disable-all: true
+formatters:
   enable:
-    # базовые (включены по умолчанию, но перечисляем явно)
-    - govet
-    - errcheck
-    - staticcheck
-    - unused
-    - gosimple
-    # формат / стиль
     - gofmt
     - goimports
+
+linters:
+  default: standard
+  enable:
     # надёжность
     - gosec
     - revive

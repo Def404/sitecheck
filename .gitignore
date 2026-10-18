@@ -13,6 +13,9 @@ go.work.sum
 /checker-go/checker
 /sitecheck/sitecheck
 
+# Build output
+/dist/
+
 # Python
 __pycache__/
 *.py[cod]

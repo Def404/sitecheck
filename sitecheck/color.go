@@ -39,16 +39,3 @@ func stateColor(state string) string {
 		return ""
 	}
 }
-
-func tlsColor(status string) string {
-	switch status {
-	case "OK":
-		return colorGreen
-	case "WARNING":
-		return colorYellow
-	case "EXPIRED", "ERROR":
-		return colorRed
-	default:
-		return ""
-	}
-}

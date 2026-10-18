@@ -1,35 +1,252 @@
-# checker-site
+# sitecheck
 
-Однократная проверка списка сайтов: HTTP GET, DNS, срок TLS-сертификата.
+Однократная проверка доступности списка сайтов: HTTP GET, DNS-резолвинг, срок действия TLS-сертификата, сведения о системе и сети.
 
-Код — пакет [`sitecheck`](sitecheck/). Модуль Go (`go.mod`) лежит в корне репозитория. Сборка и тесты: `make`.
+Написан на Go (модуль `sitecheck`, Go 1.24+). Код — в каталоге [`sitecheck/`](sitecheck/), `go.mod` — в корне репозитория.
+
+## Возможности
+
+- Проверка списка URL из файла: HTTP GET, статус-код, время отклика
+- DNS-резолвинг каждого хоста (IP-адреса в отчёте)
+- Срок действия TLS-сертификата (`https` только) с предупреждением при < 7 дней
+- Повторные попытки: `--retries N` с фиксированным бэкоффом 200 мс
+- Параллельная проверка: `--concurrency N` (по умолчанию 5)
+- Текстовый отчёт: `[СЕТЬ]`, `[СИСТЕМА]`, построчные результаты, `[ИТОГО]`, `Reasons:`
+- JSON-отчёт: `--json` (массив результатов) или `--json-report` (полный отчёт)
+- Сведения о системе: hostname, user, OS (Linux / macOS / Windows)
+- Сведения о сети: локальный IP, исходящий IP, шлюз (с ping), DNS-серверы,
+  VPN-интерфейсы, все IPv4
+- Кросс-платформенность: Linux, macOS, Windows
+
+## Требования
+
+- Go **1.24+** (для сборки из исходников)
+- `ping` в PATH (для ping шлюза) — опционально, без него поле `Ping шлюза`
+  будет помечено как ошибка
+
+## Сборка
+
+```bash
+make build        # → dist/sitecheck
+make test         # go test -race
+make lint         # golangci-lint (если установлен)
+make cross        # все 5 платформ → dist/
+```
 
 ## Запуск
 
 ```bash
-make build
-./dist/sitecheck sitecheck/site.txt
-./dist/sitecheck --json-report --output report.json sitecheck/site.txt
-SITECHECK_TIMEOUT=10s ./dist/sitecheck --concurrency 8 --retries 1 sitecheck/site.txt
+# Текстовый отчёт (по умолчанию)
+./dist/sitecheck sites.txt
+
+# JSON-массив результатов
+./dist/sitecheck --json sites.txt
+
+# JSON-отчёт (система + сеть + результаты + итоги)
+./dist/sitecheck --json-report sites.txt
+
+# JSON-отчёт в файл
+./dist/sitecheck --json-report --output report.json sites.txt
+
+# Параллельная проверка (8 потоков), 1 повтор после сбоя
+./dist/sitecheck --concurrency 8 --retries 1 sites.txt
+
+# Другой таймаут (по умолчанию 5s)
+SITECHECK_TIMEOUT=10s ./dist/sitecheck sites.txt
+
+# Версия
+./dist/sitecheck --version
 ```
-
-Код выхода `1`, если хотя бы один сайт недоступен или аргументы неверны.
-
-## Аргументы
-
-| Флаг | Описание | По умолчанию |
-|---|---|---|
-| файл (позиционный) | список URL, один на строку; `#` — комментарий | — |
-| `--concurrency` | параллельные проверки | 5 |
-| `--retries` | повторы после сбоя | 0 |
-| `--json` | JSON-массив результатов | выкл |
-| `--json-report` | JSON-отчёт (система, сеть, итоги) | выкл |
-| `--output FILE` | записать JSON в файл (вместе с `--json` или `--json-report`) | stdout |
-| `--text-output FILE` | продублировать текстовый отчёт в файл | stdout |
-| `--version` | версия сборки | — |
-
-Таймаут HTTP: переменная `SITECHECK_TIMEOUT` (по умолчанию `5s`).
 
 ## Формат списка
 
-Один URL на строку, схема `http` или `https`. Строки с `#` и пустые строки пропускаются.
+Один URL на строку, схема `http` или `https`. Пустые строки и строки,
+начинающиеся с `#`, пропускаются.
+
+```
+# production
+https://example.com
+https://api.example.com
+http://internal.local:8080/health
+```
+
+> **Примечание:** строка без схемы (например, `example.com`) будет отклонена
+> как invalid URL. Добавьте `https://` явно (см. `TODOS.md` п. 6 — автодобавление
+> схемы в планах).
+
+## Флаги
+
+| Флаг | Описание | По умолчанию |
+|---|---|---|
+| `file` (позиционный) | путь к файлу со списком URL | — |
+| `--concurrency N` | число параллельных проверок (положительное целое) | `5` |
+| `--retries N` | число повторных попыток после сбоя (≥ 0) | `0` |
+| `--json` | вывод: JSON-массив результатов | выкл |
+| `--json-report` | вывод: JSON-отчёт (система, сеть, результаты, итоги) | выкл |
+| `--output FILE` | записать JSON в файл (только с `--json` / `--json-report`) | stdout |
+| `--text-output FILE` | продублировать текстовый отчёт в файл (только без `--json` / `--json-report`) | stdout |
+| `--version` | версия сборки (ldflags) и выход | — |
+
+Совместимость флагов: `--json` и `--json-report` взаимоисключающие;
+`--output` требует один из них; `--text-output` требует текстовый режим.
+
+## Переменные окружения
+
+| Переменная | Описание | По умолчанию |
+|---|---|---|
+| `SITECHECK_TIMEOUT` | таймаут одного HTTP-запроса (формат `time.Duration`: `5s`, `100ms`, `1m`) | `5s` |
+
+## Коды выхода
+
+| Код | Значение |
+|---|---|
+| `0` | все сайты доступны |
+| `1` | хотя бы один сайт недоступен **или** аргументы неверны |
+
+Сообщения об ошибке аргументов — в stderr; отчёт — в stdout.
+
+## Примеры вывода
+
+### Текстовый (`sites.txt` → stdout)
+
+```
+[СЕТЬ]
+  Локальный IP:  192.168.1.100
+  Исходящий IP:  172.16.0.1
+  Шлюз:          192.168.1.1 (eth0)
+  Ping шлюза:    OK (0.85 ms)
+  DNS-серверы:   192.168.1.1
+  VPN:           не обнаружен
+  Все IPv4:
+    - 192.168.1.100
+    - 172.16.0.1
+
+[СИСТЕМА]
+  OS: Ubuntu 24.04 LTS
+  User: alex@host
+
+Checking: https://example.com
+	Status: 200
+	State: UP
+	Attempts: 1
+	TLS: OK
+	Certificate expires: 2027-01-15
+	Days remaining: 88
+	Duration: 142 ms
+	IP addresses:
+		- 93.184.216.34
+
+Checking: https://api.example.com
+	Status: -
+	State: DOWN
+	Attempts: 2
+	TLS: ERROR
+	TLS error: TLS connection to api.example.com: dial tcp: lookup api.example.com: no such host
+	Duration: 5012 ms
+	Error: Get "https://api.example.com": dial tcp: lookup api.example.com: no such host
+	Reason: DNS
+
+[ИТОГО]
+  Проверено:       2
+  Доступно:        1
+  Недоступно:      1
+  Время проверки:  5.15 s
+
+Reasons:
+  DNS: 1
+```
+
+### JSON-отчёт (`--json-report`)
+
+```json
+{
+    "system": {
+        "hostname": "host",
+        "username": "alex",
+        "os": "Ubuntu 24.04 LTS"
+    },
+    "network": {
+        "local_ip": "192.168.1.100",
+        "primary_ip": "172.16.0.1",
+        "gateway": { "ip": "192.168.1.1", "interface": "eth0" },
+        "gateway_ping": { "ran": true, "success": true, "latency_ms": 0.85 },
+        "dns_servers": ["192.168.1.1"],
+        "vpn_interfaces": [],
+        "local_ips": ["192.168.1.100", "172.16.0.1"]
+    },
+    "total": 2,
+    "up": 1,
+    "down": 1,
+    "check_duration_ms": 5153,
+    "reasons": { "DNS": 1 },
+    "results": [
+        {
+            "url": "https://example.com",
+            "status_code": 200,
+            "up": true,
+            "duration_ms": 142,
+            "reason": "",
+            "attempts": 1
+        },
+        {
+            "url": "https://api.example.com",
+            "status_code": 0,
+            "up": false,
+            "duration_ms": 5012,
+            "reason": "DNS",
+            "attempts": 2
+        }
+    ]
+}
+```
+
+### JSON-массив результатов (`--json`)
+
+```json
+[
+  {
+    "url": "https://example.com",
+    "status_code": 200,
+    "up": true,
+    "duration_ms": 142,
+    "reason": "",
+    "attempts": 1
+  },
+  {
+    "url": "https://api.example.com",
+    "status_code": 0,
+    "up": false,
+    "duration_ms": 5012,
+    "reason": "DNS",
+    "attempts": 2
+  }
+]
+```
+
+## Состояние сайта
+
+- `UP` — HTTP-статус `2xx` или `3xx` (redirect не следует, `CheckRedirect`
+  возвращает `http.ErrUseLastResponse`)
+- `DOWN` — ошибка запроса, статус `4xx`/`5xx`
+- `TLS: WARNING` — сертификат истекает в ближайшие 7 дней
+- `TLS: EXPIRED` — сертификат истёк (детектируется только при `http.Get`, если
+  сервер принимает соединение; отдельный TLS-раздел в отчёте всегда показывает
+  `NotAfter`)
+
+## Кроссплатформенность
+
+| Платформа | DNS | Шлюз | Ping | OS-имя |
+|---|---|---|---|---|
+| Linux | `resolv.conf` + `resolvectl` | `ip route` | `ping -c 1 -W 1` | `/etc/os-release` |
+| macOS | `scutil --dns` | `route -n get default` | `ping -c 1 -t 1` | `sw_vers` |
+| Windows | PowerShell `Get-DnsClientServerAddress` | PowerShell `Get-NetRoute` | `ping -n 1 -w 1000` | PowerShell `Win32_OperatingSystem` |
+
+Сборка: `make cross` → 5 бинарников в `dist/`.
+
+## Лицензия
+
+MIT — см. [LICENSE](LICENSE).
+
+## TODO
+
+Планируемые улучшения — в [`TODOS.md`](TODOS.md).

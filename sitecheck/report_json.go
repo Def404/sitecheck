@@ -68,16 +68,6 @@ func marshalReport(report Report) ([]byte, error) {
 	return json.MarshalIndent(toJSONReport(report), "", "    ")
 }
 
-func printJSON(result Result) error {
-	data, err := json.MarshalIndent(toJSONResult(result), "", "  ")
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(string(data))
-	return nil
-}
-
 func printJSONResults(results []Result) error {
 	data, err := marshalResults(results)
 	if err != nil {
@@ -89,7 +79,7 @@ func printJSONResults(results []Result) error {
 }
 
 func saveJSON(filename string, data []byte) error {
-	return os.WriteFile(filename, data, 0o644)
+	return os.WriteFile(filename, data, 0o600)
 }
 
 func saveJSONResults(filename string, results []Result) error {

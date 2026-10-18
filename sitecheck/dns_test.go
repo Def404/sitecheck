@@ -100,7 +100,7 @@ func TestGetLinuxDNSServers(t *testing.T) {
 	t.Run("reads and parses resolv.conf", func(t *testing.T) {
 		content := "nameserver 8.8.8.8\nnameserver 1.1.1.1\n"
 		path := filepath.Join(t.TempDir(), "resolv.conf")
-		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			t.Fatalf("write temp file: %v", err)
 		}
 
@@ -134,7 +134,7 @@ func TestGetLinuxDNSServers(t *testing.T) {
 
 	t.Run("no nameserver entries", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "resolv.conf")
-		if err := os.WriteFile(path, []byte("search example.com\noptions ndots:0\n"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("search example.com\noptions ndots:0\n"), 0600); err != nil {
 			t.Fatalf("write temp file: %v", err)
 		}
 

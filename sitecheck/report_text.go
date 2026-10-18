@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -258,14 +257,6 @@ func printReport(w io.Writer, report Report) error {
 		printf("  %s: %d\n", reason, report.Reasons[reason])
 	}
 	return err
-}
-
-func reportToString(report Report) (string, error) {
-	var buf bytes.Buffer
-	if err := printReport(&buf, report); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 func writeReportToBoth(report Report, path string) (err error) {

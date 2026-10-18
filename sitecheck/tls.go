@@ -19,7 +19,7 @@ func getTLSExpiration(ctx context.Context, host string, port string) (time.Time,
 	if err != nil {
 		return time.Time{}, fmt.Errorf("TLS connection to %s: %w", host, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	tlsConn, ok := conn.(*tls.Conn)
 	if !ok {

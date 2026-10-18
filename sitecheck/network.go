@@ -35,7 +35,7 @@ type NetworkInfo struct {
 	VPNInterfaces    []InterfaceInfo `json:"vpn_interfaces,omitempty"`
 }
 
-func getNetworkInfo(ctx context.Context) (NetworkInfo, error) {
+func getNetworkInfo(ctx context.Context) NetworkInfo {
 	info := NetworkInfo{}
 
 	primaryIP, err := getPrimaryLocalIP()
@@ -92,7 +92,7 @@ func getNetworkInfo(ctx context.Context) (NetworkInfo, error) {
 		}
 	}
 
-	return info, nil
+	return info
 }
 
 func collectDNSServers(ifaces []InterfaceDNS) []string {
@@ -304,9 +304,10 @@ func parseDefaultGateway(routes string) (GatewayInfo, error) {
 
 		var gwIP, iface string
 		for i := 1; i < len(fields)-1; i++ {
-			if fields[i] == "via" {
+			switch fields[i] {
+			case "via":
 				gwIP = fields[i+1]
-			} else if fields[i] == "dev" {
+			case "dev":
 				iface = fields[i+1]
 			}
 		}
@@ -503,7 +504,7 @@ func getPrimaryLocalIP() (string, error) {
 		return "", fmt.Errorf("dial 1.1.1.1:53 to detect primary local IP: %w", err)
 	}
 
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	udpAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 	if !ok {

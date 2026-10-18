@@ -17,9 +17,10 @@ var (
 	buildDate = "unknown"
 )
 
-func printVersion(w *os.File) {
-	fmt.Fprintf(w, "sitecheck %s (commit %s, %s, %s/%s)\n",
+func printVersion(w *os.File) error {
+	_, err := fmt.Fprintf(w, "sitecheck %s (commit %s, %s, %s/%s)\n",
 		version, commit, buildDate, runtime.GOOS, runtime.GOARCH)
+	return err
 }
 
 func main() {

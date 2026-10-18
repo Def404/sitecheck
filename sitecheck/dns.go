@@ -120,21 +120,20 @@ func getLinuxResolvedDNS() ([]InterfaceDNS, error) {
 }
 
 func getLinuxDNSInfo() ([]InterfaceDNS, error) {
-	if ifaces, err := getLinuxResolvedDNS(); err == nil {
+	ifaces, resolvErr := getLinuxResolvedDNS()
+	if resolvErr == nil {
 		return ifaces, nil
-	} else {
-		resolvErr := err
-
-		servers, err := getLinuxDNSServers()
-		if err == nil {
-			return []InterfaceDNS{{
-				Interface: "resolv.conf",
-				Servers:   servers,
-			}}, nil
-		}
-
-		return nil, errors.Join(resolvErr, fmt.Errorf("fallback to /etc/resolv.conf: %w", err))
 	}
+
+	servers, err := getLinuxDNSServers()
+	if err == nil {
+		return []InterfaceDNS{{
+			Interface: "resolv.conf",
+			Servers:   servers,
+		}}, nil
+	}
+
+	return nil, errors.Join(resolvErr, fmt.Errorf("fallback to /etc/resolv.conf: %w", err))
 }
 
 func parseWindowsDNSServers(output string) ([]string, error) {

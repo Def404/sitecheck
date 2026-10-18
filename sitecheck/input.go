@@ -12,7 +12,11 @@ func loadURLs(path string) ([]string, error) {
 		return nil, err
 	}
 
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			err = cerr
+		}
+	}()
 
 	var lines []string
 

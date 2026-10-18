@@ -1,3 +1,4 @@
+// Package main — sitecheck: однократная проверка доступности списка сайтов.
 package main
 
 import (
@@ -18,8 +19,7 @@ func run(args []string) error {
 	}
 
 	if opts.Version {
-		printVersion(os.Stdout)
-		return nil
+		return printVersion(os.Stdout)
 	}
 
 	urls, err := loadURLs(opts.Path)
@@ -33,7 +33,7 @@ func run(args []string) error {
 	}
 
 	client := &http.Client{
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
@@ -43,10 +43,7 @@ func run(args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: could not get system info: %s\n", err)
 	}
 
-	netInfo, err := getNetworkInfo(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not get network info: %s\n", err)
-	}
+	netInfo := getNetworkInfo(ctx)
 
 	results := make([]Result, len(urls))
 
@@ -158,7 +155,11 @@ func check(client *http.Client, url string, timeout time.Duration, resolve func(
 			result.Reason = errorReason(err)
 			result.Retryable = isRetryableError(err)
 		} else {
-			defer resp.Body.Close()
+			defer func() {
+				if cerr := resp.Body.Close(); cerr != nil {
+					result.Err = cerr
+				}
+			}()
 
 			result.StatusCode = resp.StatusCode
 			result.Up = isUp(resp.StatusCode)

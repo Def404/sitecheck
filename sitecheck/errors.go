@@ -33,12 +33,7 @@ func isDNSError(err error) bool {
 	}
 
 	var dnsErr *net.DNSError
-
-	if errors.As(err, &dnsErr) {
-		return true
-	}
-
-	return false
+	return errors.As(err, &dnsErr)
 }
 
 func isConnectionRefused(err error) bool {
@@ -61,11 +56,7 @@ func isTLSError(err error) bool {
 	}
 
 	var hostErr x509.HostnameError
-	if errors.As(err, &hostErr) {
-		return true
-	}
-
-	return false
+	return errors.As(err, &hostErr)
 }
 
 func isExpiredCertificate(err error) bool {

@@ -142,7 +142,7 @@ func TestCheckHTTPStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			statusCode := tt.statusCode
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(statusCode)
 			}))
 			defer server.Close()
@@ -171,7 +171,7 @@ func TestCheckHTTPStatus(t *testing.T) {
 }
 
 func TestCheckTimeout(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(200 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -199,7 +199,7 @@ func TestCheckTimeout(t *testing.T) {
 }
 
 func TestCheckDNSFailure(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -254,7 +254,7 @@ https://example.com
 # internal
 https://gitlab.example.com
 `
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("WriteFile: %v", err)
 		}
 
@@ -307,7 +307,7 @@ func TestCountReasons(t *testing.T) {
 	}
 }
 
-func fakeResolver(ctx context.Context, host string) ([]string, error) {
+func fakeResolver(_ context.Context, host string) ([]string, error) {
 	if host == "example.com" {
 		return []string{"192.0.2.10"}, nil
 	}
@@ -315,7 +315,7 @@ func fakeResolver(ctx context.Context, host string) ([]string, error) {
 	return nil, fmt.Errorf("unexpected host: %s", host)
 }
 
-func failingResolver(ctx context.Context, host string) ([]string, error) {
+func failingResolver(_ context.Context, host string) ([]string, error) {
 	return nil, fmt.Errorf("resolve %s: dns failure", host)
 }
 

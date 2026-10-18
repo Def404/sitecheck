@@ -17,6 +17,7 @@ type Options struct {
 	TextOutput  string
 	Concurrency int
 	Retries     int
+	Version     bool
 }
 
 func parseArgs(args []string) (Options, error) {
@@ -29,9 +30,14 @@ func parseArgs(args []string) (Options, error) {
 	textOutput := fs.String("text-output", "", "write the text summary to this file")
 	concurrency := fs.Int("concurrency", 5, "maximum number of concurrent checks")
 	retries := fs.Int("retries", 0, "number of retry attempts after the initial check fails")
+	version := fs.Bool("version", false, "print version information and exit")
 
 	if err := fs.Parse(args); err != nil {
 		return Options{}, err
+	}
+
+	if *version {
+		return Options{Version: true}, nil
 	}
 
 	if *concurrency <= 0 {

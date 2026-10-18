@@ -4,9 +4,23 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 )
 
 var ErrSitesDown = errors.New("sites are down")
+
+// version, commit, buildDate — значения подставляются через ldflags при сборке.
+// См. Makefile: -X main.version=... -X main.commit=... -X main.buildDate=...
+var (
+	version   = "dev"
+	commit    = "none"
+	buildDate = "unknown"
+)
+
+func printVersion(w *os.File) {
+	fmt.Fprintf(w, "sitecheck %s (commit %s, %s, %s/%s)\n",
+		version, commit, buildDate, runtime.GOOS, runtime.GOARCH)
+}
 
 func main() {
 	err := run(os.Args[1:])

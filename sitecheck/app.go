@@ -17,6 +17,11 @@ func run(args []string) error {
 		return err
 	}
 
+	if opts.Version {
+		printVersion(os.Stdout)
+		return nil
+	}
+
 	urls, err := loadURLs(opts.Path)
 	if err != nil {
 		return fmt.Errorf("load urls from %s: %w", opts.Path, err)

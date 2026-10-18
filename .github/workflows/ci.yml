@@ -65,7 +65,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: 2.15.0
+          version: v2.15.0
           args: --config=.golangci.yml ${{ env.PKG }}/...
 
   # ---------------------------------------------------------------------

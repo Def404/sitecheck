@@ -5,9 +5,6 @@ version: "2"
 
 run:
   timeout: 5m
-
-# Пропускаем артефакты и каталоги с бинарниками
-issues:
   exclude-dirs:
     - dist
 
@@ -28,28 +25,27 @@ linters:
     - unparam
     - prealloc
     - ineffassign
+  settings:
+    goimports:
+      local-prefixes: sitecheck
 
-linters-settings:
-  goimports:
-    local-prefixes: sitecheck
+    gosec:
+      # CGO и exec.Command используются осознанно (ping, powershell, scutil)
+      excludes:
+        - G104 # error return not checked — используем errors.Join в большинстве мест
+        - G204 # audit use of subprocess launching — exec.Command для системных утилит
+        - G304 # file path provided as taint input — пути из CLI-аргументов
 
-  gosec:
-    # CGO и exec.Command используются осознанно (ping, powershell, scutil)
-    excludes:
-      - G104 # error return not checked — используем errors.Join в большинстве мест
-      - G204 # audit use of subprocess launching — exec.Command для системных утилит
-      - G304 # file path provided as taint input — пути из CLI-аргументов
+    revive:
+      rules:
+        - name: package-comments
+        - name: exported
+          arguments:
+            - "checkPrivateReceivers"
+        - name: unexported-return
+        - name: unused-parameter
+        - name: indent-error-flow
 
-  revive:
-    rules:
-      - name: package-comments
-      - name: exported
-        arguments:
-          - "checkPrivateReceivers"
-      - name: unexported-return
-      - name: unused-parameter
-      - name: indent-error-flow
-
-  misspell:
-    locale: US
-    ignore-words: []
+    misspell:
+      locale: US
+      ignore-words: []

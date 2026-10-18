@@ -12,6 +12,7 @@ type JSONResult struct {
 	Up         bool   `json:"up"`
 	DurationMS int64  `json:"duration_ms"`
 	Reason     string `json:"reason"`
+	Attempts   int    `json:"attempts"`
 }
 
 type JSONReport struct {
@@ -32,6 +33,7 @@ func toJSONResult(result Result) JSONResult {
 		Up:         result.Up,
 		DurationMS: result.Duration.Milliseconds(),
 		Reason:     result.Reason,
+		Attempts:   result.Attempts,
 	}
 }
 

@@ -16,6 +16,7 @@ type Options struct {
 	OutputFile  string
 	TextOutput  string
 	Concurrency int
+	Retries     int
 }
 
 func parseArgs(args []string) (Options, error) {
@@ -27,6 +28,7 @@ func parseArgs(args []string) (Options, error) {
 	output := fs.String("output", "", "write JSON report to this file")
 	textOutput := fs.String("text-output", "", "write the text summary to this file")
 	concurrency := fs.Int("concurrency", 5, "maximum number of concurrent checks")
+	retries := fs.Int("retries", 0, "number of retry attempts after the initial check fails")
 
 	if err := fs.Parse(args); err != nil {
 		return Options{}, err
@@ -34,6 +36,10 @@ func parseArgs(args []string) (Options, error) {
 
 	if *concurrency <= 0 {
 		return Options{}, fmt.Errorf("--concurrency must be a positive number, got %d", *concurrency)
+	}
+
+	if *retries < 0 {
+		return Options{}, fmt.Errorf("--retries cannot be negative, got %d", *retries)
 	}
 
 	rest := fs.Args()
@@ -63,6 +69,7 @@ func parseArgs(args []string) (Options, error) {
 		OutputFile:  *output,
 		TextOutput:  *textOutput,
 		Concurrency: *concurrency,
+		Retries:     *retries,
 	}, nil
 }
 

@@ -13,6 +13,8 @@ type Result struct {
 	Duration     time.Duration
 	Err          error
 	Reason       string
+	Retryable    bool
+	Attempts     int
 	IPs          []string
 	DNSErr       error
 	TLSExpiresAt time.Time

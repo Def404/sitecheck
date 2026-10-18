@@ -81,6 +81,27 @@ func isExpiredCertificate(err error) bool {
 	return false
 }
 
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	if isTLSError(err) {
+		return false
+	}
+
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return dnsErr.IsTemporary
+	}
+
+	return true
+}
+
 func statusReason(statusCode int) string {
 	if isUp(statusCode) {
 		return ""

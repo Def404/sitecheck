@@ -60,7 +60,19 @@ func run(args []string) error {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			result := check(client, url, timeout, resolveIPs)
+			var result Result
+			attempts := 0
+			for attempt := 0; attempt <= opts.Retries; attempt++ {
+				result = check(client, url, timeout, resolveIPs)
+				attempts++
+				if !result.Retryable {
+					break
+				}
+				if attempt < opts.Retries {
+					time.Sleep(200 * time.Millisecond)
+				}
+			}
+			result.Attempts = attempts
 			results[i] = result
 		}()
 	}
@@ -139,6 +151,7 @@ func check(client *http.Client, url string, timeout time.Duration, resolve func(
 		if err != nil {
 			result.Err = err
 			result.Reason = errorReason(err)
+			result.Retryable = isRetryableError(err)
 		} else {
 			defer resp.Body.Close()
 

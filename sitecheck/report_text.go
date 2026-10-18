@@ -28,6 +28,7 @@ func printResult(w io.Writer, result Result) error {
 
 	state := result.State()
 	printf("\tState: %s\n", state)
+	printf("\tAttempts: %d\n", result.Attempts)
 
 	if u, perr := parseURL(result.URL); perr == nil && u.Scheme == "https" {
 		status := tlsStatus(result.TLSExpiresAt, result.TLSErr)

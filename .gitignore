@@ -10,19 +10,10 @@ coverage.out
 coverage.html
 go.work
 go.work.sum
-/checker-go/checker
 /sitecheck/sitecheck
 
 # Build output
 /dist/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-venv/
-.env
 
 # Generated reports
 /report.txt

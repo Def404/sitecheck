@@ -63,8 +63,10 @@ jobs:
           ./dist/sitecheck --version
 
       - name: golangci-lint
-        working-directory: ${{ github.workspace }}
-        run: make lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: 2.15.0
+          args: --config=.golangci.yml ${{ env.PKG }}/...
 
   # ---------------------------------------------------------------------
   # 2. Кросс-компиляция + артефакты

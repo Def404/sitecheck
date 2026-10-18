@@ -53,17 +53,17 @@ func TestParseResolvConf(t *testing.T) {
 			want: []string{"9.9.9.9"},
 		},
 		{
-			name: "handles leading whitespace before directive",
+			name:    "handles leading whitespace before directive",
 			content: "  nameserver 1.0.0.1\n",
 			want:    []string{"1.0.0.1"},
 		},
 		{
-			name: "handles tabs as field separator",
+			name:    "handles tabs as field separator",
 			content: "nameserver\t1.0.0.2\n",
 			want:    []string{"1.0.0.2"},
 		},
 		{
-			name: "empty content",
+			name:    "empty content",
 			content: "",
 			want:    nil,
 		},
@@ -154,9 +154,9 @@ func TestGetLinuxDNSServers(t *testing.T) {
 
 func TestParseMacOSDNSServers(t *testing.T) {
 	tests := []struct {
-		name    string
-		output  string
-		want    []string
+		name   string
+		output string
+		want   []string
 	}{
 		{
 			name: "two servers, example from spec",
@@ -169,9 +169,9 @@ func TestParseMacOSDNSServers(t *testing.T) {
 			want: []string{"192.168.1.1", "1.1.1.1"},
 		},
 		{
-			name: "single server",
+			name:   "single server",
 			output: "  nameserver[0] : 8.8.8.8\n",
-			want:    []string{"8.8.8.8"},
+			want:   []string{"8.8.8.8"},
 		},
 		{
 			name: "duplicates removed, first occurrence order kept",
@@ -208,19 +208,19 @@ func TestParseMacOSDNSServers(t *testing.T) {
 			want: []string{"192.168.1.1", "1.1.1.1"},
 		},
 		{
-			name: "handles extra spaces after colon",
+			name:   "handles extra spaces after colon",
 			output: "  nameserver[0] :    8.8.8.8\n",
-			want:    []string{"8.8.8.8"},
+			want:   []string{"8.8.8.8"},
 		},
 		{
-			name:    "empty output",
-			output:  "",
-			want:    nil,
+			name:   "empty output",
+			output: "",
+			want:   nil,
 		},
 		{
-			name:    "only search domains, no nameservers",
-			output:  "  Domain : example.com\n  Search Domain\n    example.com\n",
-			want:    nil,
+			name:   "only search domains, no nameservers",
+			output: "  Domain : example.com\n  Search Domain\n    example.com\n",
+			want:   nil,
 		},
 	}
 
@@ -262,9 +262,9 @@ func TestParseWindowsDNSServers(t *testing.T) {
 			want:   []string{"8.8.8.8", "1.1.1.1"},
 		},
 		{
-			name:    "invalid IP in array",
-			output:  `["8.8.8.8","notanip","1.1.1.1"]`,
-			want:    []string{"8.8.8.8", "1.1.1.1"},
+			name:   "invalid IP in array",
+			output: `["8.8.8.8","notanip","1.1.1.1"]`,
+			want:   []string{"8.8.8.8", "1.1.1.1"},
 		},
 		{
 			name:    "all entries invalid",

@@ -108,9 +108,9 @@
 - **Файл:** `config.go`, `app.go`
 - **Описание:** Выводить только код выхода (0/1) без текста. Для использования в CI/скриптах.
 
-### 23. Добавить `--version`
+### 23. Добавить `--version` ✅ (выполнено 2026-10-19)
 - **Файл:** `main.go`, `config.go`
-- **Описание:** Флаг `--version` печатает версию бинарника (verison via `ldflags`).
+- **Готово:** Флаг `--version` печатает `sitecheck <ver> (commit <hash>, <date>, <os>/<arch>)`.
 
 ### 24. Добавить `--help` с примерами
 - **Файл:** `config.go`
@@ -298,17 +298,14 @@
 - **Готово:** MIT License (2026 sitecheck contributors), пометка в `go.mod`
   (`// License: MIT — see LICENSE.`).
 
-### 57. Версионирование
-- **Файл:** `main.go`
-- **Описание:** Встроить версию через `ldflags`:
-  ```
-  -ldflags "-X main.version=1.0.0 -X main.commit=$(git rev-parse --short HEAD)"
-  ```
-  Флаг `--version` печатает `sitecheck version 1.0.0 (commit abc1234, go1.24.4)`.
+### 57. Версионирование ✅ (выполнено 2026-10-19)
+- **Файл:** `main.go`, `Makefile`
+- **Готово:** `ldflags "-X main.version=... -X main.commit=... -X main.buildDate=..."`.
+  Флаг `--version` печатает `sitecheck <ver> (commit <hash>, <date>, <os>/<arch>)`.
 
-### 58. `.gitignore` дополнить
+### 58. `.gitignore` дополнить ✅ (выполнено 2026-10-19)
 - **Файл:** `.gitignore`
-- **Описание:** Добавить: `sitecheck` (бинарник), `*.exe`, `coverage.*`, `dist/`.
+- **Готово:** `*.exe`, `coverage.out`, `coverage.html`, `/dist/`, `/sitecheck/sitecheck`.
 
 ### 59. Интеграция с Uptime Kuma / Grafana
 - **Описание:** (вне кода) Документировать, как использовать JSON-отчёт в Grafana (JSON data source) или в Uptime Kuma (custom script). Примеры запросов.

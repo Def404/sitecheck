@@ -5,13 +5,19 @@ version: "2"
 
 run:
   timeout: 5m
-  exclude-dirs:
-    - dist
 
 formatters:
   enable:
     - gofmt
     - goimports
+  settings:
+    goimports:
+      # Группировать импорты модуля после сторонних пакетов.
+      local-prefixes:
+        - sitecheck
+  exclusions:
+    paths:
+      - (^|/)dist(/|$)
 
 linters:
   default: standard
@@ -26,9 +32,6 @@ linters:
     - prealloc
     - ineffassign
   settings:
-    goimports:
-      local-prefixes: sitecheck
-
     gosec:
       # CGO и exec.Command используются осознанно (ping, powershell, scutil)
       excludes:
@@ -48,4 +51,6 @@ linters:
 
     misspell:
       locale: US
-      ignore-words: []
+  exclusions:
+    paths:
+      - (^|/)dist(/|$)

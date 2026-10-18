@@ -1,16 +1,19 @@
 package main
 
+import "time"
+
 type Report struct {
-	System    SystemInfo
-	Network   NetworkInfo
-	Results   []Result
-	Total     int
-	UpCount   int
-	DownCount int
-	Reasons   map[string]int
+	System        SystemInfo
+	Network       NetworkInfo
+	Results       []Result
+	Total         int
+	UpCount       int
+	DownCount     int
+	CheckDuration time.Duration
+	Reasons       map[string]int
 }
 
-func buildReport(system SystemInfo, network NetworkInfo, results []Result) Report {
+func buildReport(system SystemInfo, network NetworkInfo, results []Result, checkDuration time.Duration) Report {
 	total := len(results)
 	upCount := 0
 
@@ -21,13 +24,14 @@ func buildReport(system SystemInfo, network NetworkInfo, results []Result) Repor
 	}
 
 	return Report{
-		System:    system,
-		Network:   network,
-		Results:   results,
-		Total:     total,
-		UpCount:   upCount,
-		DownCount: total - upCount,
-		Reasons:   countReasons(results),
+		System:        system,
+		Network:       network,
+		Results:       results,
+		Total:         total,
+		UpCount:       upCount,
+		DownCount:     total - upCount,
+		CheckDuration: checkDuration,
+		Reasons:       countReasons(results),
 	}
 }
 

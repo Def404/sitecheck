@@ -10,11 +10,12 @@ import (
 )
 
 type Options struct {
-	Path       string
-	JSONOutput bool
-	JSONReport bool
-	OutputFile string
-	TextOutput string
+	Path        string
+	JSONOutput  bool
+	JSONReport  bool
+	OutputFile  string
+	TextOutput  string
+	Concurrency int
 }
 
 func parseArgs(args []string) (Options, error) {
@@ -25,9 +26,14 @@ func parseArgs(args []string) (Options, error) {
 	jsonReport := fs.Bool("json-report", false, "output a JSON report")
 	output := fs.String("output", "", "write JSON report to this file")
 	textOutput := fs.String("text-output", "", "write the text summary to this file")
+	concurrency := fs.Int("concurrency", 5, "maximum number of concurrent checks")
 
 	if err := fs.Parse(args); err != nil {
 		return Options{}, err
+	}
+
+	if *concurrency <= 0 {
+		return Options{}, fmt.Errorf("--concurrency must be a positive number, got %d", *concurrency)
 	}
 
 	rest := fs.Args()
@@ -51,11 +57,12 @@ func parseArgs(args []string) (Options, error) {
 	}
 
 	return Options{
-		Path:       rest[0],
-		JSONOutput: *json,
-		JSONReport: *jsonReport,
-		OutputFile: *output,
-		TextOutput: *textOutput,
+		Path:        rest[0],
+		JSONOutput:  *json,
+		JSONReport:  *jsonReport,
+		OutputFile:  *output,
+		TextOutput:  *textOutput,
+		Concurrency: *concurrency,
 	}, nil
 }
 

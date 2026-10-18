@@ -235,11 +235,11 @@ func printReport(w io.Writer, report Report) error {
 		println()
 	}
 
-	println("Summary")
-	println("-------")
-	printf("Total:  %d\n", report.Total)
-	printf("UP:     %d\n", report.UpCount)
-	printf("DOWN:   %d\n", report.DownCount)
+	println("[ИТОГО]")
+	printf("  Проверено:       %d\n", report.Total)
+	printf("  Доступно:        %d\n", report.UpCount)
+	printf("  Недоступно:      %d\n", report.DownCount)
+	printf("  Время проверки:  %.2f s\n", report.CheckDuration.Seconds())
 
 	if err != nil || len(report.Reasons) == 0 {
 		return err

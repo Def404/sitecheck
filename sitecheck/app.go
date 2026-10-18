@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -42,14 +43,33 @@ func run(args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: could not get network info: %s\n", err)
 	}
 
-	results := make([]Result, 0, len(urls))
+	results := make([]Result, len(urls))
 
-	for _, url := range urls {
-		result := check(client, url, timeout, resolveIPs)
-		results = append(results, result)
+	sem := make(chan struct{}, opts.Concurrency)
+
+	start := time.Now()
+
+	var wg sync.WaitGroup
+
+	wg.Add(len(urls))
+
+	for i, url := range urls {
+		sem <- struct{}{}
+
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			result := check(client, url, timeout, resolveIPs)
+			results[i] = result
+		}()
 	}
 
-	report := buildReport(sysInfo, netInfo, results)
+	wg.Wait()
+
+	checkDuration := time.Since(start)
+
+	report := buildReport(sysInfo, netInfo, results, checkDuration)
 
 	switch {
 	case opts.JSONReport:

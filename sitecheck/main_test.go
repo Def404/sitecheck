@@ -21,11 +21,11 @@ func TestParseArgs(t *testing.T) {
 		want    Options
 		wantErr string
 	}{
-		{name: "filename", args: []string{"sites.txt"}, want: Options{Path: "sites.txt"}},
-		{name: "json and filename", args: []string{"--json", "sites.txt"}, want: Options{Path: "sites.txt", JSONOutput: true}},
-		{name: "json output and filename", args: []string{"--json", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", JSONOutput: true, OutputFile: "report.json"}},
-		{name: "json report", args: []string{"--json-report", "sites.txt"}, want: Options{Path: "sites.txt", JSONReport: true}},
-		{name: "json report output", args: []string{"--json-report", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", JSONReport: true, OutputFile: "report.json"}},
+		{name: "filename", args: []string{"sites.txt"}, want: Options{Path: "sites.txt", Concurrency: 5}},
+		{name: "json and filename", args: []string{"--json", "sites.txt"}, want: Options{Path: "sites.txt", JSONOutput: true, Concurrency: 5}},
+		{name: "json output and filename", args: []string{"--json", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", JSONOutput: true, OutputFile: "report.json", Concurrency: 5}},
+		{name: "json report", args: []string{"--json-report", "sites.txt"}, want: Options{Path: "sites.txt", JSONReport: true, Concurrency: 5}},
+		{name: "json report output", args: []string{"--json-report", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", JSONReport: true, OutputFile: "report.json", Concurrency: 5}},
 		{name: "no args", args: []string{}, wantErr: "filename is required"},
 		{name: "json without filename", args: []string{"--json"}, wantErr: "filename is required"},
 		{name: "unknown flag", args: []string{"--unknown", "sites.txt"}, wantErr: "flag provided but not defined: -unknown"},
@@ -37,7 +37,7 @@ func TestParseArgs(t *testing.T) {
 		{name: "output without json", args: []string{"--output", "report.json", "sites.txt"}, wantErr: "--output requires --json or --json-report"},
 		{name: "json output without filename", args: []string{"--json", "--output", "report.json"}, wantErr: "filename is required"},
 		{name: "json and json report", args: []string{"--json", "--json-report", "sites.txt"}, wantErr: "--json and --json-report cannot be used together"},
-		{name: "text output", args: []string{"--text-output", "report.txt", "sites.txt"}, want: Options{Path: "sites.txt", TextOutput: "report.txt"}},
+		{name: "text output", args: []string{"--text-output", "report.txt", "sites.txt"}, want: Options{Path: "sites.txt", TextOutput: "report.txt", Concurrency: 5}},
 		{name: "json and text output", args: []string{"--json", "--text-output", "report.txt", "sites.txt"}, wantErr: "--text-output cannot be used with --json or --json-report"},
 		{name: "json report and text output", args: []string{"--json-report", "--text-output", "report.txt", "sites.txt"}, wantErr: "--text-output cannot be used with --json or --json-report"},
 	}

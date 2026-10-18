@@ -12,6 +12,7 @@ permissions:
 
 env:
   GO_VERSION: '1.24.4'
+  PKG: ./sitecheck  # main-пакет; go.mod лежит в корне
 
 jobs:
   # ---------------------------------------------------------------------
@@ -29,18 +30,20 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+          cache-dependency-path: go.mod
 
       - name: go mod tidy (verify)
         run: |
           go mod tidy
           if ! git diff --exit-code -- go.mod go.sum; then
             echo "::error::go.mod / go.sum are not tidy. Run 'make tidy'."
+            git diff -- go.mod go.sum
             exit 1
           fi
 
       - name: gofmt check
         run: |
-          bad=$(gofmt -l .)
+          bad=$(gofmt -l sitecheck)
           if [ -n "$bad" ]; then
             echo "::error::gofmt: files need formatting:"
             echo "$bad"
@@ -48,21 +51,20 @@ jobs:
           fi
 
       - name: go vet
-        run: go vet ./...
-
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          args: --timeout=5m
+        run: go vet ${{ env.PKG }}/...
 
       - name: Test (with race detector)
-        run: go test -race -count=1 -v ./...
+        run: go test -race -count=1 -v ${{ env.PKG }}/...
 
       - name: Build (local, verify ldflags)
+        working-directory: ${{ github.workspace }}
         run: |
           make build
-          ./sitecheck/sitecheck --version
+          ./dist/sitecheck --version
+
+      - name: golangci-lint
+        working-directory: ${{ github.workspace }}
+        run: make lint
 
   # ---------------------------------------------------------------------
   # 2. Кросс-компиляция + артефакты
@@ -100,13 +102,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+          cache-dependency-path: go.mod
 
       - name: Version info
         run: |
           VERSION="${GITHUB_REF_NAME}"
-          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then
-            VERSION="dev"
-          fi
+          case "$GITHUB_REF" in
+            refs/tags/*) : ;;
+            *) VERSION="dev" ;;
+          esac
           COMMIT="${GITHUB_SHA:0:7}"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -114,18 +118,15 @@ jobs:
           echo "BUILD_DATE=$DATE" >> "$GITHUB_ENV"
 
       - name: Build
-        env:
-          VERSION: ${{ env.VERSION }}
-          COMMIT: ${{ env.COMMIT }}
-          BUILD_DATE: ${{ env.BUILD_DATE }}
         run: |
           out="sitecheck-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            out="$out.exe"
-          fi
+          [ "${{ matrix.goos }}" = "windows" ] && out="$out.exe"
+          mkdir -p dist
+          make build VERSION="$VERSION" COMMIT="$COMMIT" \
+            BINARY_OUT="dist/$out" 2>/dev/null || \
           go build -trimpath \
             -ldflags "-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.buildDate=$BUILD_DATE" \
-            -o "dist/$out" ./sitecheck
+            -o "dist/$out" $PKG
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -173,19 +174,16 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+          cache-dependency-path: go.mod
 
       - name: Build
-        env:
-          VERSION: ${{ github.ref_name }}
-          COMMIT: ${{ github.sha }}
         run: |
           out="sitecheck-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            out="$out.exe"
-          fi
+          [ "${{ matrix.goos }}" = "windows" ] && out="$out.exe"
+          mkdir -p dist
           go build -trimpath \
-            -ldflags "-s -w -X main.version=$VERSION -X main.commit=${COMMIT:0:7} -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            -o "dist/$out" ./sitecheck
+            -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }} -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o "dist/$out" $PKG
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

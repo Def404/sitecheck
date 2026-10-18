@@ -9,8 +9,8 @@ LDFLAGS  := -s -w \
             -X main.commit=$(COMMIT) \
             -X main.buildDate=$(DATE)
 
-# Каталог Go-модуля
-PKG := sitecheck
+# Каталог main-пакета (модуль — в корне репозитория)
+PKG := ./sitecheck
 
 # Целевые платформы кросс-компиляции (platform → suffix).
 # windows-arm64 закомментирован: Go кросс-компилирует, но без CGo есть проблемы с exec
@@ -29,29 +29,29 @@ all: build test vet
 ## build: собрать текущий бинарник в dist/
 build:
 	@mkdir -p dist
-	cd $(PKG) && CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o ../dist/$(BINARY) .
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o dist/$(BINARY) $(PKG)
 	@echo "Built: dist/$(BINARY)"
 
 ## test: прогон всех тестов
 test:
-	cd $(PKG) && $(GO) test -race -count=1 ./...
+	$(GO) test -race -count=1 $(PKG)/...
 
 ## vet: go vet
 vet:
-	cd $(PKG) && $(GO) vet ./...
+	$(GO) vet $(PKG)/...
 
 ## lint: golangci-lint (если установлен)
 lint:
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not installed: https://golangci-lint.run/usage/install/"; exit 1; }
-	cd $(PKG) && golangci-lint run ./...
+	golangci-lint run $(PKG)/...
 
-## fmt: gofmt (в каталоге Go-модуля)
+## fmt: gofmt (в каталоге main-пакета)
 fmt:
-	cd $(PKG) && gofmt -w .
+	gofmt -w $(PKG)
 
 ## fmt-check: проверка без правки (для CI)
 fmt-check:
-	@bad=$$(cd $(PKG) && gofmt -l .); \
+	@bad=$$(gofmt -l $(PKG)); \
 	if [ -n "$$bad" ]; then \
 		echo "gofmt: needs formatting:"; echo "$$bad"; \
 		exit 1; \
@@ -61,7 +61,7 @@ fmt-check:
 
 ## tidy: go mod tidy
 tidy:
-	cd $(PKG) && $(GO) mod tidy
+	$(GO) mod tidy
 
 ## cross: кросс-компиляция всех PLATFORMS в dist/
 cross: clean
@@ -72,9 +72,9 @@ cross: clean
 		[ "$$goos" = "windows" ] && suffix=".exe"; \
 		out="dist/$(BINARY)-$$p$$suffix"; \
 		echo "Building $$out"; \
-		(cd $(PKG) && CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch \
+		CGO_ENABLED=0 GOOS=$$goos GOARCH=$$goarch \
 			$(GO) build -trimpath -ldflags "$(LDFLAGS)" \
-			-o ../$$out .) || exit 1; \
+			-o $$out $(PKG) || exit 1; \
 	done
 	@echo "--- dist/ ---"
 	@ls -lh dist/

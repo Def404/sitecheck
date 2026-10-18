@@ -1,55 +1,68 @@
 # Changelog
 
-All notable changes to this project are documented in this file.
+Все значимые изменения в этом проекте документируются в этом файле.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
+версионирование — по [Semantic Versioning](https://semver.org/lang/ru/).
+
+## [0.2.0] — 2026-10-19
+
+### Добавлено
+- ANSI-цвета в консольном выводе (TODOS #35): UP — зелёный, DOWN — красный,
+  TLS WARNING — жёлтый, заголовки секций — bold. Цвета автоматически
+  отключаются, если stdout не TTY (`golang.org/x/term`).
+
+### Исправлено
+- 22 находки golangci-lint: errcheck (5), gosec G306 (4),
+  revive (8), staticcheck S1008/QF1003 (3), unparam (1), unused (2).
+- `.golangci.yml` приведён к валидной схеме v2.15.0
+  (`linters-settings` → `linters.settings`, `issues.exclude-dirs` → `run.exclude-dirs`).
 
 ## [0.1.0] — 2026-10-19
 
-### Added
-- Go CLI tool `sitecheck` — single-pass availability check for a list of URLs
-  via HTTP GET, with DNS resolution and TLS certificate expiration detection.
-- Flags: `--concurrency`, `--retries`, `--json`, `--json-report`, `--output`,
+### Добавлено
+- Go CLI-инструмент `sitecheck` — однократная проверка доступности списка URL
+  через HTTP GET, с DNS-резолвингом и определением срока действия TLS-сертификата.
+- Флаги: `--concurrency`, `--retries`, `--json`, `--json-report`, `--output`,
   `--text-output`, `--version`.
-- System info block in reports: hostname, username, OS name
+- Блок сведений о системе в отчёте: hostname, username, OS
   (Linux / macOS / Windows).
-- Network info block in reports: local IP, outgoing IP, gateway (with ping),
-  DNS servers (resolved / resolv.conf / macOS / Windows), VPN interfaces,
-  all local IPv4 addresses.
-- Cross-platform gateway ping dispatcher (`pingGateway`) with per-OS
-  implementations.
-- Cross-compile targets: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64,
+- Блок сведений о сети в отчёте: локальный IP, исходящий IP, шлюз (с ping),
+  DNS-серверы (resolved / resolv.conf / macOS / Windows), VPN-интерфейсы,
+  все локальные IPv4.
+- Кроссплатформенный диспетчер ping шлюза (`pingGateway`) с реализациями
+  для каждой ОС.
+- Цели кросс-компиляции: linux/amd64, linux/arm64, darwin/amd64, darwin/arm64,
   windows/amd64.
-- `Makefile` with targets: `build`, `test`, `vet`, `lint`, `fmt`, `fmt-check`,
+- `Makefile` с целями: `build`, `test`, `vet`, `lint`, `fmt`, `fmt-check`,
   `tidy`, `clean`, `cross`, `help`.
 - GitHub Actions CI: check (fmt, vet, golangci-lint, test -race, build),
-  cross-compile matrix, release on `v*` tags.
-- `.golangci.yml` (v2) with linters: govet, errcheck, staticcheck, unused,
+  кросс-компиляция (матрица 5 платформ), release по тегам `v*`.
+- `.golangci.yml` (v2) с linters: govet, errcheck, staticcheck, unused,
   gosimple, gofmt, goimports, gosec, revive, misspell, unconvert, unparam,
   prealloc, ineffassign.
-- Retryable error classification: `isRetryableError()` in `errors.go` —
-  DeadlineExceeded → retry, TLS → no retry, DNS → `IsTemporary`,
-  connection refused → retry, generic → retry.
-- 200 ms backoff between retry attempts (fixed, see `app.go`).
-- `--version` prints `sitecheck <version> (commit <hash>, <date>, <os>/<arch>)`.
-- `TODOS.md` — prioritized task list for future work.
+- Классификация retryable-ошибок: `isRetryableError()` в `errors.go` —
+  DeadlineExceeded → повтор, TLS → без повтора, DNS → `IsTemporary`,
+  connection refused → повтор, generic → повтор.
+- Задержка 200 мс между повторными попытками (фиксированная, см. `app.go`).
+- `--version` выводит `sitecheck <версия> (commit <hash>, <дата>, <os>/<arch>)`.
+- `TODOS.md` — приоритизированный список задач.
 
-### Changed
-- Replaced Python implementation with a Go implementation.
-- `go.mod` moved to repository root; source files in `sitecheck/`.
-- Code split from a single 864-line `main.go` into 14 focused files, all
-  `package main`.
-- CI: `golangci-lint-action` replaces `make lint` in GitHub Actions;
-  linter version pinned with `v` prefix.
-- `golangci-lint` configuration migrated to v2 schema.
+### Изменено
+- Python-реализация заменена на Go.
+- `go.mod` перенесён в корень репозитория; исходные файлы в `sitecheck/`.
+- Код разбит из единого `main.go` (864 строки) на 14 модульных файлов,
+  все `package main`.
+- CI: `golangci-lint-action` заменяет `make lint` в GitHub Actions;
+  версия линтера зафиксирована с префиксом `v`.
+- Конфигурация `golangci-lint` мигрирована на схему v2.
 
-### Removed
-- `checker-go/` (archived Go prototype).
-- `checker.py` (original Python implementation).
+### Удалено
+- `checker-go/` (архивный Go-прототип).
+- `checker.py` (исходная Python-реализация).
 
-### Fixed
-- DNS / TLS are not attempted when the HTTP request already failed
-  (context cancellation, invalid URL).
-- `isConnectionRefused` — Linux-only via `syscall.ECONNREFUSED` (see
-  `TODOS.md` p. 3 for the macOS/Windows fix).
+### Исправлено
+- DNS / TLS не выполняются, если HTTP-запрос уже завершился ошибкой
+  (отмена контекста, невалидный URL).
+- `isConnectionRefused` — работает только на Linux через
+  `syscall.ECONNREFUSED` (см. `TODOS.md` п. 3 для macOS/Windows).

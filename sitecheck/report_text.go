@@ -26,13 +26,13 @@ func printResult(w io.Writer, result Result) error {
 	}
 
 	state := result.State()
-	printf("\tState: %s\n", state)
+	printf("\tState: %s\n", colorize(stateColor(state), state))
 	printf("\tAttempts: %d\n", result.Attempts)
 
 	if u, perr := parseURL(result.URL); perr == nil && u.Scheme == "https" {
 		status := tlsStatus(result.TLSExpiresAt, result.TLSErr)
 
-		printf("\tTLS: %s\n", status)
+		printf("\tTLS: %s\n", colorize(tlsColor(status), status))
 
 		switch status {
 		case "ERROR":
@@ -72,7 +72,7 @@ func printResult(w io.Writer, result Result) error {
 }
 
 func printNetworkInfo(w io.Writer, network NetworkInfo) error {
-	_, err := fmt.Fprintf(w, "[СЕТЬ]\n")
+	_, err := fmt.Fprintf(w, "%s\n", colorize(colorBold, "[СЕТЬ]"))
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func printNetworkInfo(w io.Writer, network NetworkInfo) error {
 }
 
 func printSystemInfo(w io.Writer, system SystemInfo) error {
-	_, err := fmt.Fprintf(w, "[СИСТЕМА]\n")
+	_, err := fmt.Fprintf(w, "%s\n", colorize(colorBold, "[СИСТЕМА]"))
 	if err != nil {
 		return err
 	}
@@ -235,10 +235,10 @@ func printReport(w io.Writer, report Report) error {
 		println()
 	}
 
-	println("[ИТОГО]")
+	println(colorize(colorBold, "[ИТОГО]"))
 	printf("  Проверено:       %d\n", report.Total)
-	printf("  Доступно:        %d\n", report.UpCount)
-	printf("  Недоступно:      %d\n", report.DownCount)
+	printf("  Доступно:        %s\n", colorize(colorGreen, itoa(report.UpCount)))
+	printf("  Недоступно:      %s\n", colorize(colorRed, itoa(report.DownCount)))
 	printf("  Время проверки:  %.2f s\n", report.CheckDuration.Seconds())
 
 	if err != nil || len(report.Reasons) == 0 {

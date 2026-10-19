@@ -13,6 +13,7 @@ type JSONResult struct {
 	DurationMS int64  `json:"duration_ms"`
 	Reason     string `json:"reason"`
 	Attempts   int    `json:"attempts"`
+	Skipped    bool   `json:"skipped,omitempty"`
 }
 
 type JSONReport struct {
@@ -34,6 +35,7 @@ func toJSONResult(result Result) JSONResult {
 		DurationMS: result.Duration.Milliseconds(),
 		Reason:     result.Reason,
 		Attempts:   result.Attempts,
+		Skipped:    result.Skipped,
 	}
 }
 

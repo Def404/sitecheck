@@ -4,18 +4,26 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 )
 
 func run(args []string) error {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	opts, err := parseArgs(args)
 	if err != nil {
 		return err
+	}
+
+	if opts.Help {
+		return printHelp(os.Stdout)
 	}
 
 	if opts.Version {
@@ -32,11 +40,7 @@ func run(args []string) error {
 		return err
 	}
 
-	client := &http.Client{
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	client := newHTTPClient(opts)
 
 	sysInfo, err := getSystemInfo()
 	if err != nil {
@@ -53,9 +57,23 @@ func run(args []string) error {
 
 	var wg sync.WaitGroup
 
+	// Прогресс-строка пишется в stdout; при JSON или --text-output
+	// подавляется (io.Discard), чтобы не смешивать \r с JSON/файлом.
+	var progressOut io.Writer
+	if opts.JSONOutput || opts.JSONReport || opts.TextOutput != "" {
+		progressOut = io.Discard
+	} else {
+		progressOut = os.Stdout
+	}
+
+	progress := newProgress(progressOut, len(urls), useColor)
+
 	wg.Add(len(urls))
 
 	for i, url := range urls {
+		if ctx.Err() != nil {
+			break
+		}
 		sem <- struct{}{}
 
 		go func() {
@@ -65,23 +83,58 @@ func run(args []string) error {
 			var result Result
 			attempts := 0
 			for attempt := 0; attempt <= opts.Retries; attempt++ {
-				result = check(client, url, timeout, resolveIPs)
+				result = check(ctx, client, url, timeout, resolveIPs)
 				attempts++
 				if !result.Retryable {
 					break
 				}
 				if attempt < opts.Retries {
-					time.Sleep(200 * time.Millisecond)
+					select {
+					case <-time.After(200 * time.Millisecond):
+					case <-ctx.Done():
+					}
+					if ctx.Err() != nil {
+						break
+					}
 				}
 			}
 			result.Attempts = attempts
 			results[i] = result
+			progress.tick()
 		}()
 	}
 
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	// Без сигнала ждём все проверки: иначе tick() дописывает полосу
+	// через \r поверх уже печатаемого отчёта. После Ctrl+C — не дольше 5 с,
+	// затем частичный отчёт.
+	select {
+	case <-done:
+	case <-ctx.Done():
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
+	}
+
+	progress.finish()
 
 	checkDuration := time.Since(start)
+
+	interrupted := ctx.Err() != nil
+	if interrupted {
+		for i := range results {
+			if results[i].Attempts == 0 {
+				results[i].URL = urls[i]
+				results[i].Skipped = true
+			}
+		}
+	}
 
 	report := buildReport(sysInfo, netInfo, results, checkDuration)
 
@@ -115,6 +168,10 @@ func run(args []string) error {
 		}
 	}
 
+	if interrupted {
+		return fmt.Errorf("interrupted: %w", errInterrupted)
+	}
+
 	for _, result := range results {
 		if !result.Up {
 			return ErrSitesDown
@@ -124,13 +181,13 @@ func run(args []string) error {
 	return nil
 }
 
-func check(client *http.Client, url string, timeout time.Duration, resolve func(context.Context, string) ([]string, error)) (result Result) {
+func check(ctx context.Context, client *http.Client, url string, timeout time.Duration, resolve func(context.Context, string) ([]string, error)) (result Result) {
 	start := time.Now()
 	defer func() {
 		result.Duration = time.Since(start)
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	result = Result{
@@ -178,4 +235,16 @@ func check(client *http.Client, url string, timeout time.Duration, resolve func(
 	}
 
 	return result
+}
+
+// newHTTPClient — клиент для проверки сайтов: redirect не следует
+// (CheckRedirect → http.ErrUseLastResponse), таймаут на запрос задаётся
+// отдельно через context в check(). Настройки TLS/Transport — будущие
+// расширения (TODOS #39).
+func newHTTPClient(opts Options) *http.Client {
+	return &http.Client{
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }

@@ -7,7 +7,10 @@ import (
 	"runtime"
 )
 
-var ErrSitesDown = errors.New("sites are down")
+var (
+	ErrSitesDown   = errors.New("sites are down")
+	errInterrupted = errors.New("interrupted by user")
+)
 
 // version, commit, buildDate — значения подставляются через ldflags при сборке.
 // См. Makefile: -X main.version=... -X main.commit=... -X main.buildDate=...
@@ -25,10 +28,12 @@ func printVersion(w *os.File) error {
 
 func main() {
 	err := run(os.Args[1:])
-	if errors.Is(err, ErrSitesDown) {
+	switch {
+	case errors.Is(err, errInterrupted):
+		os.Exit(130)
+	case errors.Is(err, ErrSitesDown):
 		os.Exit(1)
-	}
-	if err != nil {
+	case err != nil:
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}

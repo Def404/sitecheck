@@ -2,8 +2,33 @@
 
 Все значимые изменения в этом проекте документируются в этом файле.
 
-Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
-версионирование — по [Semantic Versioning](https://semver.org/lang/ru/).
+## [Unreleased]
+
+## [0.4.0] — 2026-10-20
+
+### Добавлено
+- Флаг `--help` (TODOS #24): печатает строку использования и блок примеров
+  на stdout (exit 0), обрабатывается до валидации аргументов.
+- Прерывание по Ctrl+C (TODOS #31): `run()` использует `signal.NotifyContext`
+  (SIGINT/SIGTERM). При прерывании все активные HTTP-запросы, DNS и
+  TLS-проверки немедленно отменяются, незапущенные проверки пропускаются,
+  выводится частичный отчёт, процесс завершается с кодом **130**.
+- Graceful shutdown (TODOS #32): после сигнала ожидаются текущие проверки
+  (до 5 s), затем печатается частичный отчёт с пометкой «не проверено»
+  для непроверенных URL.
+- Прогресс-бар (TODOS #37): при нескольких URL строка
+  `[██████░░░░] 60% (3/5)` обновляется через `\r` на TTY и очищается
+  перед отчётом. Не выводится при `--json`, `--json-report`,
+  `--text-output` и при одном URL.
+
+### Изменено
+- Конфигурация `http.Client` вынесена в `newHTTPClient(opts)` (TODOS #30) —
+  центральное место для настроек клиента (redirect, future: TLS, Transport).
+
+### Исправлено
+- Прогресс-бар больше не впечатывается в отчёт. Обычный запуск ждёт все
+  проверки; лимит 5 с действует только после Ctrl+C или SIGTERM. Обновления
+  полосы после её очистки не рисуются.
 
 ## [0.3.0] — 2026-10-19
 
@@ -73,3 +98,9 @@
   (отмена контекста, невалидный URL).
 - `isConnectionRefused` — работает только на Linux через
   `syscall.ECONNREFUSED` (см. `TODOS.md` п. 3 для macOS/Windows).
+
+[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Def404/sitecheck/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/Def404/sitecheck/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/Def404/sitecheck/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/Def404/sitecheck/releases/tag/v0.1.0

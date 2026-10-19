@@ -15,6 +15,7 @@ type Result struct {
 	Reason       string
 	Retryable    bool
 	Attempts     int
+	Skipped      bool
 	IPs          []string
 	DNSErr       error
 	TLSExpiresAt time.Time

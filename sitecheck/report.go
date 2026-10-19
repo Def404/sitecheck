@@ -16,10 +16,14 @@ type Report struct {
 func buildReport(system SystemInfo, network NetworkInfo, results []Result, checkDuration time.Duration) Report {
 	total := len(results)
 	upCount := 0
+	skippedCount := 0
 
 	for _, result := range results {
-		if result.Up {
+		switch {
+		case result.Up:
 			upCount++
+		case result.Skipped:
+			skippedCount++
 		}
 	}
 
@@ -29,7 +33,7 @@ func buildReport(system SystemInfo, network NetworkInfo, results []Result, check
 		Results:       results,
 		Total:         total,
 		UpCount:       upCount,
-		DownCount:     total - upCount,
+		DownCount:     total - upCount - skippedCount,
 		CheckDuration: checkDuration,
 		Reasons:       countReasons(results),
 	}

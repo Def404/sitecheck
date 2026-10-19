@@ -172,6 +172,17 @@ func printResultsTable(w io.Writer, results []Result) error {
 			host = u.Host
 		}
 
+		if r.Skipped {
+			rows = append(rows, row{
+				url:      host,
+				status:   "—",
+				duration: "—",
+				tls:      "—",
+				reason:   "не проверено",
+			})
+			continue
+		}
+
 		st := r.State()
 		statusStr := st
 		if r.StatusCode > 0 {

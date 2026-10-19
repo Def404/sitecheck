@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -40,6 +42,8 @@ func TestParseArgs(t *testing.T) {
 		{name: "text output", args: []string{"--text-output", "report.txt", "sites.txt"}, want: Options{Path: "sites.txt", TextOutput: "report.txt", Concurrency: 5}},
 		{name: "json and text output", args: []string{"--json", "--text-output", "report.txt", "sites.txt"}, wantErr: "--text-output cannot be used with --json or --json-report"},
 		{name: "json report and text output", args: []string{"--json-report", "--text-output", "report.txt", "sites.txt"}, wantErr: "--text-output cannot be used with --json or --json-report"},
+		{name: "help", args: []string{"--help"}, want: Options{Help: true}},
+		{name: "help with args", args: []string{"--help", "sites.txt"}, want: Options{Help: true}},
 	}
 
 	for _, tt := range tests {
@@ -126,6 +130,50 @@ func TestParseURL(t *testing.T) {
 	}
 }
 
+func TestNewHTTPClientRedirectNotFollowed(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://example.com/other")
+		w.WriteHeader(http.StatusMovedPermanently)
+	}))
+	defer server.Close()
+
+	client := newHTTPClient(Options{})
+
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("client.Get() error = %v, want nil", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMovedPermanently {
+		t.Errorf("StatusCode = %d, want %d (redirect must not be followed)", resp.StatusCode, http.StatusMovedPermanently)
+	}
+}
+
+func TestCheckInterruptedContext(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := &http.Client{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result := check(ctx, client, server.URL, time.Second, fakeResolver)
+
+	if result.Up {
+		t.Errorf("Up = %v, want false", result.Up)
+	}
+	if result.Err == nil {
+		t.Errorf("Err = nil, want cancellation error")
+	}
+	if result.Reason != "request failed" {
+		t.Errorf("Reason = %q, want %q", result.Reason, "request failed")
+	}
+}
+
 func TestCheckHTTPStatus(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -149,7 +197,7 @@ func TestCheckHTTPStatus(t *testing.T) {
 
 			client := &http.Client{}
 
-			result := check(client, server.URL, time.Second, fakeResolver)
+			result := check(context.Background(), client, server.URL, time.Second, fakeResolver)
 
 			if result.StatusCode != tt.statusCode {
 				t.Errorf("StatusCode = %d, want %d", result.StatusCode, tt.statusCode)
@@ -179,7 +227,7 @@ func TestCheckTimeout(t *testing.T) {
 
 	client := &http.Client{}
 
-	result := check(client, server.URL, 50*time.Millisecond, fakeResolver)
+	result := check(context.Background(), client, server.URL, 50*time.Millisecond, fakeResolver)
 
 	if result.Up {
 		t.Errorf("Up = %v, want false", result.Up)
@@ -206,7 +254,7 @@ func TestCheckDNSFailure(t *testing.T) {
 
 	client := &http.Client{}
 
-	result := check(client, server.URL, time.Second, failingResolver)
+	result := check(context.Background(), client, server.URL, time.Second, failingResolver)
 
 	if !result.Up {
 		t.Errorf("Up = %v, want true", result.Up)
@@ -284,6 +332,64 @@ https://gitlab.example.com
 			t.Errorf("loadURLs() = %#v, want nil", got)
 		}
 	})
+}
+
+func TestBuildReportWithSkipped(t *testing.T) {
+	results := []Result{
+		{URL: "https://up.example.com", Up: true, Attempts: 1},
+		{URL: "https://down.example.com", Up: false, Reason: "DNS", Attempts: 1},
+		{URL: "https://skipped1.example.com", Skipped: true},
+		{URL: "https://skipped2.example.com", Skipped: true},
+	}
+
+	report := buildReport(SystemInfo{}, NetworkInfo{}, results, time.Second)
+
+	if report.Total != 4 {
+		t.Errorf("Total = %d, want 4", report.Total)
+	}
+	if report.UpCount != 1 {
+		t.Errorf("UpCount = %d, want 1", report.UpCount)
+	}
+	if report.DownCount != 1 {
+		t.Errorf("DownCount = %d, want 1 (skipped excluded)", report.DownCount)
+	}
+}
+
+func TestToJSONResultSkipped(t *testing.T) {
+	result := Result{
+		URL:     "https://skipped.example.com",
+		Skipped: true,
+	}
+
+	got := toJSONResult(result)
+	if !got.Skipped {
+		t.Errorf("Skipped = %v, want true", got.Skipped)
+	}
+
+	data, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if !strings.Contains(string(data), `"skipped":true`) {
+		t.Errorf("marshaled JSON = %s, want it to contain %q", data, `"skipped":true`)
+	}
+}
+
+func TestToJSONResultNoSkipped(t *testing.T) {
+	result := Result{
+		URL:     "https://up.example.com",
+		Up:      true,
+		Attempts: 1,
+	}
+
+	got := toJSONResult(result)
+	data, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if strings.Contains(string(data), "skipped") {
+		t.Errorf("marshaled JSON = %s, want no %q key when not skipped", data, "skipped")
+	}
 }
 
 func TestCountReasons(t *testing.T) {

@@ -40,16 +40,21 @@ func getLinuxVPNClient(ctx context.Context) VPNClientInfo {
 }
 
 // parseLinuxVPNProcesses парсит вывод ps aux и определяет VPN-клиент.
+// Порядок важен: сначала обёртки (amnezia), потом транспорт (openvpn,
+// wireguard) — Amnezia запускает openvpn под капотом, и без приоритета
+// клиент показался бы как openvpn.
 func parseLinuxVPNProcesses(output string) VPNClientInfo {
 	processes := []string{
+		"amnezia",
 		"openvpn",
 		"wireguard",
 		"wg-quick",
-		"amnezia",
 	}
 
+	outputLower := strings.ToLower(output)
+
 	for _, process := range processes {
-		if strings.Contains(output, process) {
+		if strings.Contains(outputLower, process) {
 			return VPNClientInfo{
 				Type:            mapProcessToType(process),
 				ClientName:      process,
@@ -74,13 +79,15 @@ func getMacOSVPNClient(ctx context.Context) VPNClientInfo {
 
 // parseMacOSVPNProcesses парсит вывод ps aux и определяет VPN-клиент.
 func parseMacOSVPNProcesses(output string) VPNClientInfo {
+	// Порядок важен: сначала обёртки (amnezia), потом транспорт — Amnezia
+	// запускает openvpn под капотом.
 	processes := []struct {
 		keyword    string
 		clientType string
 	}{
+		{"amnezia", "amnezia"},
 		{"openvpn", "openvpn"},
 		{"wireguard", "wireguard"},
-		{"amnezia", "amnezia"},
 	}
 
 	outputLower := strings.ToLower(output)
@@ -112,14 +119,17 @@ func getWindowsVPNClient(ctx context.Context) VPNClientInfo {
 
 // parseWindowsVPNProcesses парсит список процессов и определяет VPN-клиент.
 func parseWindowsVPNProcesses(output string) VPNClientInfo {
+	// Порядок важен: сначала обёртки (amnezia), потом транспорт — Amnezia
+	// запускает openvpn под капотом. Короткое имя «wg» идёт последним,
+	// чтобы не перехватывать более специфичные.
 	processes := []struct {
 		keyword    string
 		clientType string
 	}{
+		{"amnezia", "amnezia"},
 		{"openvpn", "openvpn"},
 		{"wireguard", "wireguard"},
 		{"wg", "wireguard"},
-		{"amnezia", "amnezia"},
 	}
 
 	lines := strings.Split(output, "\n")

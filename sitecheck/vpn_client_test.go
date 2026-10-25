@@ -36,6 +36,12 @@ func TestParseLinuxVPNProcesses(t *testing.T) {
 			wantDet:  true,
 		},
 		{
+			name:     "amnezia + openvpn → amnezia (wrapper wins)",
+			output:   "root 1234 0.1 0.2 5678 1234 ? Sl 10:00 0:01 openvpn --config /etc/amnezia/client.conf\nuser 9999 0.5 1.2 123456 789 ? Sl 10:02 0:05 /usr/bin/amnezia",
+			wantType: "amnezia",
+			wantDet:  true,
+		},
+		{
 			name:     "multiple processes, first match wins",
 			output:   "root 1234 0.1 0.2 5678 1234 ? Sl 10:00 0:01 openvpn --config /etc/openvpn/client.conf\nroot 5678 0.0 0.1 2345 678 ? S 10:01 0:00 wg-quick up wg0",
 			wantType: "openvpn",

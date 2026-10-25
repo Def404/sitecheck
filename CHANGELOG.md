@@ -5,11 +5,14 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — по [Semantic Versioning](https://semver.org/lang/ru/).
 
-## [Unreleased]
+## [0.5.0] — 2026-10-25
 
 ### Добавлено
 - Определение типа VPN-клиента по запущенным процессам (Linux, macOS, Windows):
   OpenVPN, WireGuard, Amnezia. В отчёте выводится строка `VPN клиент: <тип>`.
+
+### Изменено
+- `make lint` теперь находит golangci-lint в `$GOPATH/bin`, если он не в `PATH`.
 
 ## [0.4.3] — 2026-10-25
 

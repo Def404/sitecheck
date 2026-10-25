@@ -1,7 +1,8 @@
 BINARY   := sitecheck
 MODULE   := sitecheck
 GO       ?= go
-VERSION  ?= 0.4.3
+VERSION  ?= 0.5.0
+GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null || echo "$$(go env GOPATH)/bin/golangci-lint")
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE     ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS  := -s -w \
@@ -40,10 +41,10 @@ test:
 vet:
 	$(GO) vet $(PKG)/...
 
-## lint: golangci-lint (если установлен)
+## lint: golangci-lint (ищет в PATH и в $GOPATH/bin)
 lint:
-	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint not installed: https://golangci-lint.run/usage/install/"; exit 1; }
-	golangci-lint run $(PKG)/...
+	@[ -x "$(GOLANGCI_LINT)" ] || { echo "golangci-lint not installed: https://golangci-lint.run/usage/install/"; exit 1; }
+	"$(GOLANGCI_LINT)" run $(PKG)/...
 
 ## fmt: gofmt (в каталоге main-пакета)
 fmt:

@@ -1,7 +1,7 @@
 BINARY   := sitecheck
 MODULE   := sitecheck
 GO       ?= go
-VERSION  ?= 0.7.0
+VERSION  ?= 0.7.1
 GOLANGCI_LINT := $(shell command -v golangci-lint 2>/dev/null || echo "$$(go env GOPATH)/bin/golangci-lint")
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE     ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)

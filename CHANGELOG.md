@@ -28,6 +28,8 @@
 - Флаги `--json`, `--json-report`, `--text-output` (заменены
   `--output-format` и `--output`).
 
+## [0.7.1] — 2026-10-25
+
 ### Исправлено
 - Детекция VPN-клиента: обёртка (Amnezia) теперь проверяется раньше
   транспорта (OpenVPN/WireGuard). Amnezia запускает `openvpn` под капотом,

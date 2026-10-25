@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-10-25
+
+### Исправлено
+- 4 находки `errcheck` в `progress_test.go`: `p.finish()` в тестовых
+  функциях вызывался без проверки возвращаемой ошибки; теперь каждая
+  запись `if err := p.finish(); err != nil { t.Errorf(...) }`.
+
 ## [0.4.2] — 2026-10-25
 
 ### Исправлено
@@ -118,7 +125,8 @@
 - `isConnectionRefused` — работает только на Linux через
   `syscall.ECONNREFUSED` (см. `TODOS.md` п. 3 для macOS/Windows).
 
-[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/Def404/sitecheck/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/Def404/sitecheck/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Def404/sitecheck/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Def404/sitecheck/compare/v0.3.0...v0.4.0

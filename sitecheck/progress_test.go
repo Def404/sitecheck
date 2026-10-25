@@ -13,7 +13,9 @@ func TestProgressDisabledSingleURL(t *testing.T) {
 		t.Errorf("enabled = %v, want false (single URL)", p.enabled)
 	}
 	p.tick()
-	p.finish()
+	if err := p.finish(); err != nil {
+		t.Errorf("finish() error = %v", err)
+	}
 }
 
 func TestProgressDisabledNoColor(t *testing.T) {
@@ -22,7 +24,9 @@ func TestProgressDisabledNoColor(t *testing.T) {
 		t.Errorf("enabled = %v, want false (no color / non-TTY)", p.enabled)
 	}
 	p.tick()
-	p.finish()
+	if err := p.finish(); err != nil {
+		t.Errorf("finish() error = %v", err)
+	}
 }
 
 func TestProgressEnabled(t *testing.T) {
@@ -33,7 +37,9 @@ func TestProgressEnabled(t *testing.T) {
 	p.tick()
 	p.tick()
 	p.tick()
-	p.finish()
+	if err := p.finish(); err != nil {
+		t.Errorf("finish() error = %v", err)
+	}
 }
 
 func TestBar(t *testing.T) {
@@ -121,7 +127,9 @@ func TestProgressTickWrites(t *testing.T) {
 	}
 
 	buf.Reset()
-	p.finish()
+	if err := p.finish(); err != nil {
+		t.Errorf("finish() error = %v", err)
+	}
 	finished := buf.String()
 	// Формат: \r + пробелы + \n (очистка строки + новая строка)
 	if !strings.HasPrefix(finished, "\r") || !strings.HasSuffix(finished, "\n") {

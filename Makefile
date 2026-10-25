@@ -1,7 +1,7 @@
 BINARY   := sitecheck
 MODULE   := sitecheck
 GO       ?= go
-VERSION  ?= 0.4.1
+VERSION  ?= 0.4.2
 COMMIT   ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE     ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS  := -s -w \

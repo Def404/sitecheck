@@ -143,7 +143,11 @@ func TestNewHTTPClientRedirectNotFollowed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("client.Get() error = %v, want nil", err)
 	}
-	defer resp.Body.Close()
+	t.Cleanup(func() {
+		if err := resp.Body.Close(); err != nil {
+			t.Errorf("resp.Body.Close() error = %v, want nil", err)
+		}
+	})
 
 	if resp.StatusCode != http.StatusMovedPermanently {
 		t.Errorf("StatusCode = %d, want %d (redirect must not be followed)", resp.StatusCode, http.StatusMovedPermanently)

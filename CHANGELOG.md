@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-10-25
+
+### Исправлено
+- 4 находки golangci-lint, сломанные в 0.4.0: `errcheck` —
+  `resp.Body.Close` в `main_test.go` (тест закрытия тела через `t.Cleanup`
+  с проверкой ошибки), `p.w.Write` в `tick()` и `finish()` прогресс-бара
+  (ошибка записи запоминается и возвращается из `finish()`); `revive`
+  `unused-parameter` — аргумент `newHTTPClient` переименован в `_`
+  (тип `Options` сохранён как задел под TLS/Transport, TODOS #39).
+
 ## [0.4.1] — 2026-10-25
 
 ### Исправлено
@@ -108,7 +118,8 @@
 - `isConnectionRefused` — работает только на Linux через
   `syscall.ECONNREFUSED` (см. `TODOS.md` п. 3 для macOS/Windows).
 
-[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/Def404/sitecheck/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Def404/sitecheck/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Def404/sitecheck/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Def404/sitecheck/compare/v0.2.0...v0.3.0

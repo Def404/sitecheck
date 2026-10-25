@@ -122,7 +122,9 @@ func run(args []string) error {
 		}
 	}
 
-	progress.finish()
+	if err := progress.finish(); err != nil {
+		return fmt.Errorf("write progress: %w", err)
+	}
 
 	checkDuration := time.Since(start)
 
@@ -241,7 +243,7 @@ func check(ctx context.Context, client *http.Client, url string, timeout time.Du
 // (CheckRedirect → http.ErrUseLastResponse), таймаут на запрос задаётся
 // отдельно через context в check(). Настройки TLS/Transport — будущие
 // расширения (TODOS #39).
-func newHTTPClient(opts Options) *http.Client {
+func newHTTPClient(_ Options) *http.Client {
 	return &http.Client{
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse

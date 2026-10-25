@@ -23,6 +23,7 @@ type progress struct {
 	last      int
 	lastWidth int
 	stopped   bool
+	werr      error
 }
 
 func newProgress(w io.Writer, total int, color bool) *progress {
@@ -30,6 +31,14 @@ func newProgress(w io.Writer, total int, color bool) *progress {
 		w:       w,
 		total:   total,
 		enabled: color && total > 1,
+	}
+}
+
+// setWerr — запоминает первую ошибку записи в p.w (под p.mu).
+// Позднее finish() вернёт её, чтобы вызывающий код мог обработать сбой.
+func (p *progress) setWerr(err error) {
+	if p.werr == nil && err != nil {
+		p.werr = err
 	}
 }
 
@@ -61,14 +70,17 @@ func (p *progress) tick() {
 	out = append(out, '\r')
 	out = append(out, line...)
 	out = append(out, spaces(p.lastWidth-lineW)...)
-	p.w.Write(out)
+	if _, err := p.w.Write(out); err != nil {
+		p.setWerr(err)
+	}
 }
 
 // finish — очищает строку прогресса и переходит на новую строку.
 // Вызывается после wg.Wait() в run(), когда все tick() уже завершены.
-func (p *progress) finish() {
+// Возвращает первую ошибку записи, накопленную в tick()/finish().
+func (p *progress) finish() error {
 	if !p.enabled {
-		return
+		return nil
 	}
 
 	p.mu.Lock()
@@ -83,7 +95,10 @@ func (p *progress) finish() {
 		out = append(out, ' ')
 	}
 	out = append(out, '\n')
-	p.w.Write(out)
+	if _, err := p.w.Write(out); err != nil {
+		p.setWerr(err)
+	}
+	return p.werr
 }
 
 // render — строка «[████░░░░] 40% (2/5)» без ANSI-кодов.

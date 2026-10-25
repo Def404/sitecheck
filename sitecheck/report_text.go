@@ -138,6 +138,12 @@ func printNetworkInfo(w io.Writer, network NetworkInfo) error {
 			parts = append(parts, vpnIf.Name+" — "+vpnIf.IP)
 		}
 		add("VPN", colorize(colorGreen, strings.Join(parts, ", ")))
+
+		if network.VPNClient.Detected {
+			add("VPN клиент", colorize(colorGreen, network.VPNClient.Type))
+		} else {
+			add("VPN клиент", "не определён")
+		}
 	default:
 		add("VPN", "не активен")
 	}

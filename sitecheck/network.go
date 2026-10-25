@@ -33,6 +33,7 @@ type NetworkInfo struct {
 	DNSError         string          `json:"dns_error,omitempty"`
 	DNSInterfaces    []InterfaceDNS  `json:"dns_interfaces,omitempty"`
 	VPNInterfaces    []InterfaceInfo `json:"vpn_interfaces,omitempty"`
+	VPNClient        VPNClientInfo   `json:"vpn_client"`
 }
 
 func getNetworkInfo(ctx context.Context) NetworkInfo {
@@ -57,6 +58,7 @@ func getNetworkInfo(ctx context.Context) NetworkInfo {
 		info.InterfacesError = fmt.Sprintf("get IPv4 interfaces: %v", err)
 	} else {
 		info.VPNInterfaces = getVPNInterfaces(interfaces)
+		info.VPNClient = getVPNClientInfo(ctx)
 
 		localIP, gateway, lanErr := getLANInfo(interfaces)
 		if lanErr != nil {

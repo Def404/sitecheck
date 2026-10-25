@@ -1,13 +1,14 @@
 # sitecheck
 
-Однократная проверка доступности списка сайтов: HTTP GET, DNS-резолвинг, срок действия TLS-сертификата, сведения о системе и сети.
+Однократная проверка доступности списка сайтов: HTTP GET, DNS-резолвинг, ping каждого хоста, срок действия TLS-сертификата, сведения о системе и сети.
 
 Написан на Go (модуль `sitecheck`, Go 1.24+). Код — в каталоге [`sitecheck/`](sitecheck/), `go.mod` — в корне репозитория.
 
 ## Возможности
 
 - Проверка списка URL из файла: HTTP GET, статус-код, время отклика
-- DNS-резолвинг каждого хоста (IP-адреса в отчёте)
+- DNS-резолвинг каждого хоста (IP-адрес в отчёте)
+- Ping каждого хоста (latency в отчёте) — информационно, не влияет на UP/DOWN
 - Срок действия TLS-сертификата (`https` только) с предупреждением при < 7 дней
 - Повторные попытки: `--retries N` с фиксированным бэкоффом 200 мс
 - Параллельная проверка: `--concurrency N` (по умолчанию 5)
@@ -140,12 +141,12 @@ http://internal.local:8080/health
 │ Пользов: alex@host                  │
 └─────────────────────────────────────┘
 
-┌─────────────────────┬──────────┬─────────┬─────────────┬───────────────┐
-│ URL                 │ Статус   │ Время   │ TLS         │ Причина       │
-├─────────────────────┼──────────┼─────────┼─────────────┼───────────────┤
-│ example.com         │ 200 UP   │ 142 ms  │ OK (88 д)   │               │
-│ api.example.com     │ DOWN     │ 5012 ms │ ERROR       │ DNS           │
-└─────────────────────┴──────────┴─────────┴─────────────┴───────────────┘
+┌─────────────────────┬──────────┬─────────┬───────────────────┬──────────────────┬─────────────┬───────────────┐
+│ URL                 │ Статус   │ Время   │ IP                │ PING             │ TLS         │ Причина       │
+├─────────────────────┼──────────┼─────────┼───────────────────┼──────────────────┼─────────────┼───────────────┤
+│ example.com         │ 200 UP   │ 142 ms  │ 93.184.216.34     │ OK (18.32 ms)    │ OK (88 д)   │               │
+│ api.example.com     │ DOWN     │ 5012 ms │ —                 │ —                │ ERROR       │ DNS           │
+└─────────────────────┴──────────┴─────────┴───────────────────┴──────────────────┴─────────────┴───────────────┘
 
 ┌───────────────────────────────────────────────────────────────────┐
 │ ИТОГО                                                             │
@@ -188,6 +189,8 @@ http://internal.local:8080/health
             "status_code": 200,
             "up": true,
             "duration_ms": 142,
+            "ip": "93.184.216.34",
+            "ping": { "ran": true, "success": true, "latency_ms": 18.32 },
             "reason": "",
             "attempts": 1
         },
@@ -212,6 +215,8 @@ http://internal.local:8080/health
     "status_code": 200,
     "up": true,
     "duration_ms": 142,
+    "ip": "93.184.216.34",
+    "ping": { "ran": true, "success": true, "latency_ms": 18.32 },
     "reason": "",
     "attempts": 1
   },
@@ -231,6 +236,10 @@ http://internal.local:8080/health
 - `UP` — HTTP-статус `2xx` или `3xx` (redirect не следует, `CheckRedirect`
   возвращает `http.ErrUseLastResponse`)
 - `DOWN` — ошибка запроса, статус `4xx`/`5xx`
+- `PING: OK (X ms)` — хост отвечает на ICMP-echo (информационно, не влияет
+  на UP/DOWN)
+- `PING: FAIL` — хост не ответил на ICMP (информационно)
+- `PING: —` — ping недоступен (нет утилиты, не поддерживается ОС)
 - `TLS: WARNING` — сертификат истекает в ближайшие 7 дней
 - `TLS: EXPIRED` — сертификат истёк (детектируется только при `http.Get`, если
   сервер принимает соединение; отдельный TLS-раздел в отчёте всегда показывает
@@ -238,11 +247,11 @@ http://internal.local:8080/health
 
 ## Кроссплатформенность
 
-| Платформа | DNS | Шлюз | Ping | OS-имя |
-|---|---|---|---|---|
-| Linux | `resolv.conf` + `resolvectl` | `ip route` | `ping -c 1 -W 1` | `/etc/os-release` |
-| macOS | `scutil --dns` | `route -n get default` | `ping -c 1 -t 1` | `sw_vers` |
-| Windows | PowerShell `Get-DnsClientServerAddress` | PowerShell `Get-NetRoute` | `ping -n 1 -w 1000` | PowerShell `Win32_OperatingSystem` |
+| Платформа | DNS | Шлюз | Ping шлюза | Ping хоста | OS-имя |
+|---|---|---|---|---|---|
+| Linux | `resolv.conf` + `resolvectl` | `ip route` | `ping -c 1 -W 1` | `ping -c 1 -W 2` | `/etc/os-release` |
+| macOS | `scutil --dns` | `route -n get default` | `ping -c 1 -t 1` | `ping -c 1 -W 2000` | `sw_vers` |
+| Windows | PowerShell `Get-DnsClientServerAddress` | PowerShell `Get-NetRoute` | `ping -n 1 -w 1000` | `ping -n 1 -w 2000` | PowerShell `Win32_OperatingSystem` |
 
 Сборка: `make cross` → 5 бинарников в `dist/`.
 

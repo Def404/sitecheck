@@ -7,13 +7,15 @@ import (
 )
 
 type JSONResult struct {
-	URL        string `json:"url"`
-	StatusCode int    `json:"status_code"`
-	Up         bool   `json:"up"`
-	DurationMS int64  `json:"duration_ms"`
-	Reason     string `json:"reason"`
-	Attempts   int    `json:"attempts"`
-	Skipped    bool   `json:"skipped,omitempty"`
+	URL        string      `json:"url"`
+	StatusCode int         `json:"status_code"`
+	Up         bool        `json:"up"`
+	DurationMS int64       `json:"duration_ms"`
+	IP         string      `json:"ip,omitempty"`
+	Ping       *PingResult `json:"ping,omitempty"`
+	Reason     string      `json:"reason"`
+	Attempts   int         `json:"attempts"`
+	Skipped    bool        `json:"skipped,omitempty"`
 }
 
 type JSONReport struct {
@@ -28,7 +30,7 @@ type JSONReport struct {
 }
 
 func toJSONResult(result Result) JSONResult {
-	return JSONResult{
+	jr := JSONResult{
 		URL:        result.URL,
 		StatusCode: result.StatusCode,
 		Up:         result.Up,
@@ -37,6 +39,17 @@ func toJSONResult(result Result) JSONResult {
 		Attempts:   result.Attempts,
 		Skipped:    result.Skipped,
 	}
+
+	if len(result.IPs) > 0 {
+		jr.IP = result.IPs[0]
+	}
+
+	if result.Ping.Ran {
+		ping := result.Ping
+		jr.Ping = &ping
+	}
+
+	return jr
 }
 
 func toJSONReport(report Report) JSONReport {

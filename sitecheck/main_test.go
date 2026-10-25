@@ -483,3 +483,115 @@ func TestGetVPNInterfaces(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatPingCell(t *testing.T) {
+	tests := []struct {
+		name string
+		ping PingResult
+		want string
+	}{
+		{name: "not ran", ping: PingResult{}, want: "—"},
+		{name: "success", ping: PingResult{Ran: true, Success: true, LatencyMS: 42.5}, want: "OK (42.50 ms)"},
+		{name: "failed", ping: PingResult{Ran: true, Success: false}, want: "FAIL"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatPingCell(tt.ping); got != tt.want {
+				t.Errorf("formatPingCell() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPingColorEx(t *testing.T) {
+	tests := []struct {
+		cell string
+		want string
+	}{
+		{cell: "OK (1.00 ms)", want: colorGreen},
+		{cell: "FAIL", want: colorRed},
+		{cell: "—", want: ""},
+	}
+
+	for _, tt := range tests {
+		if got := pingColorEx(tt.cell); got != tt.want {
+			t.Errorf("pingColorEx(%q) = %q, want %q", tt.cell, got, tt.want)
+		}
+	}
+}
+
+func TestToJSONResultWithPingAndIP(t *testing.T) {
+	result := Result{
+		URL:        "https://example.com",
+		StatusCode: 200,
+		Up:         true,
+		Duration:   150 * time.Millisecond,
+		IPs:        []string{"93.184.216.34", "172.66.147.243"},
+		Ping:       PingResult{Ran: true, Success: true, LatencyMS: 35.2},
+	}
+
+	jr := toJSONResult(result)
+
+	if jr.IP != "93.184.216.34" {
+		t.Errorf("IP = %q, want %q", jr.IP, "93.184.216.34")
+	}
+	if jr.Ping == nil {
+		t.Fatal("Ping is nil, want non-nil")
+	}
+	if !jr.Ping.Success {
+		t.Error("Ping.Success = false, want true")
+	}
+	if jr.Ping.LatencyMS != 35.2 {
+		t.Errorf("Ping.LatencyMS = %f, want 35.2", jr.Ping.LatencyMS)
+	}
+}
+
+func TestToJSONResultPingNotRan(t *testing.T) {
+	result := Result{
+		URL:        "https://example.com",
+		StatusCode: 200,
+		Up:         true,
+		Duration:   100 * time.Millisecond,
+	}
+
+	jr := toJSONResult(result)
+
+	if jr.Ping != nil {
+		t.Errorf("Ping = %v, want nil when not ran", jr.Ping)
+	}
+	if jr.IP != "" {
+		t.Errorf("IP = %q, want empty", jr.IP)
+	}
+}
+
+func TestToJSONResultPingMarshal(t *testing.T) {
+	result := Result{
+		URL:        "https://example.com",
+		StatusCode: 200,
+		Up:         true,
+		Duration:   100 * time.Millisecond,
+		IPs:        []string{"1.2.3.4"},
+		Ping:       PingResult{Ran: true, Success: true, LatencyMS: 12.3},
+	}
+
+	data, err := marshalResults([]Result{result})
+	if err != nil {
+		t.Fatalf("marshalResults() error: %v", err)
+	}
+
+	var decoded []JSONResult
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("json.Unmarshal error: %v", err)
+	}
+
+	if len(decoded) != 1 {
+		t.Fatalf("len = %d, want 1", len(decoded))
+	}
+	if decoded[0].IP != "1.2.3.4" {
+		t.Errorf("IP = %q, want %q", decoded[0].IP, "1.2.3.4")
+	}
+	if decoded[0].Ping == nil || !decoded[0].Ping.Success {
+		t.Errorf("Ping = %v, want success", decoded[0].Ping)
+	}
+}

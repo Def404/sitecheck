@@ -18,6 +18,7 @@ type Result struct {
 	Skipped      bool
 	IPs          []string
 	DNSErr       error
+	Ping         PingResult
 	TLSExpiresAt time.Time
 	TLSErr       error
 }

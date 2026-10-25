@@ -228,6 +228,9 @@ func check(ctx context.Context, client *http.Client, url string, timeout time.Du
 
 	result.IPs, result.DNSErr = resolve(ctx, u.Hostname())
 
+	pingRes, _ := pingGateway(ctx, u.Hostname())
+	result.Ping = pingRes
+
 	if u.Scheme == "https" {
 		port := u.Port()
 		if port == "" {

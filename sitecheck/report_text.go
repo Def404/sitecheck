@@ -167,6 +167,8 @@ func printResultsTable(w io.Writer, results []Result) error {
 		url      string
 		status   string
 		duration string
+		ip       string
+		ping     string
 		tls      string
 		reason   string
 	}
@@ -183,6 +185,8 @@ func printResultsTable(w io.Writer, results []Result) error {
 				url:      host,
 				status:   "—",
 				duration: "—",
+				ip:       "—",
+				ping:     "—",
 				tls:      "—",
 				reason:   "не проверено",
 			})
@@ -195,6 +199,13 @@ func printResultsTable(w io.Writer, results []Result) error {
 			statusStr = fmt.Sprintf("%d %s", r.StatusCode, st)
 		}
 
+		ipStr := "—"
+		if len(r.IPs) > 0 {
+			ipStr = r.IPs[0]
+		}
+
+		pingStr := formatPingCell(r.Ping)
+
 		tlsStr := "—"
 		if u, err := parseURL(r.URL); err == nil && u.Scheme == "https" {
 			tlsStr = formatTLSCell(r.TLSExpiresAt, r.TLSErr)
@@ -204,12 +215,14 @@ func printResultsTable(w io.Writer, results []Result) error {
 			url:      host,
 			status:   statusStr,
 			duration: fmt.Sprintf("%d ms", r.Duration.Milliseconds()),
+			ip:       ipStr,
+			ping:     pingStr,
 			tls:      tlsStr,
 			reason:   r.Reason,
 		})
 	}
 
-	headers := []string{"URL", "Статус", "Время", "TLS", "Причина"}
+	headers := []string{"URL", "Статус", "Время", "IP", "PING", "TLS", "Причина"}
 	cols := len(headers)
 
 	// compute column widths
@@ -218,7 +231,7 @@ func printResultsTable(w io.Writer, results []Result) error {
 		widths[i] = displayWidth(h)
 	}
 	for _, r := range rows {
-		vals := []string{r.url, r.status, r.duration, r.tls, r.reason}
+		vals := []string{r.url, r.status, r.duration, r.ip, r.ping, r.tls, r.reason}
 		for i, v := range vals {
 			if dw := displayWidth(v); dw > widths[i] {
 				widths[i] = dw
@@ -247,6 +260,8 @@ func printResultsTable(w io.Writer, results []Result) error {
 			r.url,
 			colorize(stateColor(extractState(r.status)), r.status),
 			r.duration,
+			r.ip,
+			colorize(pingColorEx(r.ping), r.ping),
 			colorize(tlsColorEx(r.tls), r.tls),
 			r.reason,
 		}
@@ -333,6 +348,27 @@ func tlsColorEx(cell string) string {
 	case strings.HasPrefix(cell, "WARNING"):
 		return colorYellow
 	case strings.HasPrefix(cell, "EXPIRED") || strings.HasPrefix(cell, "ERROR"):
+		return colorRed
+	default:
+		return ""
+	}
+}
+
+func formatPingCell(p PingResult) string {
+	if !p.Ran {
+		return "—"
+	}
+	if p.Success {
+		return fmt.Sprintf("OK (%.2f ms)", p.LatencyMS)
+	}
+	return "FAIL"
+}
+
+func pingColorEx(cell string) string {
+	switch {
+	case strings.HasPrefix(cell, "OK"):
+		return colorGreen
+	case cell == "FAIL":
 		return colorRed
 	default:
 		return ""

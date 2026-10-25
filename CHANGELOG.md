@@ -5,6 +5,15 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — по [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.6.0] — 2026-10-25
+
+### Добавлено
+- Ping каждого хоста: колонка `PING` в таблице результатов показывает
+  latency (`OK (X ms)`), `FAIL` или `—` (недоступен). Информационно —
+  не влияет на UP/DOWN и код выхода.
+- Колонка `IP` в таблице результатов: первый IP из DNS-резолвинга.
+- JSON: поля `ip` и `ping` в каждом результате (`--json` / `--json-report`).
+
 ## [0.5.0] — 2026-10-25
 
 ### Добавлено
@@ -132,7 +141,8 @@
 - `isConnectionRefused` — работает только на Linux через
   `syscall.ECONNREFUSED` (см. `TODOS.md` п. 3 для macOS/Windows).
 
-[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Def404/sitecheck/compare/v0.5.0...v0.6.0
 [0.4.3]: https://github.com/Def404/sitecheck/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/Def404/sitecheck/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Def404/sitecheck/compare/v0.4.0...v0.4.1

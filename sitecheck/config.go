@@ -10,15 +10,13 @@ import (
 )
 
 type Options struct {
-	Path        string
-	JSONOutput  bool
-	JSONReport  bool
-	OutputFile  string
-	TextOutput  string
-	Concurrency int
-	Retries     int
-	Version     bool
-	Help        bool
+	Path         string
+	OutputFormat string
+	OutputFile   string
+	Concurrency  int
+	Retries      int
+	Version      bool
+	Help         bool
 }
 
 const usage = `Использование: sitecheck [флаги] FILE
@@ -28,8 +26,8 @@ FILE — файл со списком URL (по одному на строку, 
 Примеры:
   sitecheck sites.txt
   sitecheck --concurrency 8 --retries 1 sites.txt
-  sitecheck --json-report --output report.json sites.txt
-  sitecheck --json --text-output summary.txt sites.txt
+  sitecheck --output-format json-report --output report.json sites.txt
+  sitecheck --output-format text --output summary.txt sites.txt
   SITECHECK_TIMEOUT=10s sitecheck sites.txt
   sitecheck --version
 `
@@ -43,10 +41,8 @@ func parseArgs(args []string) (Options, error) {
 	fs := flag.NewFlagSet("sitecheck", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
-	json := fs.Bool("json", false, "output results as JSON")
-	jsonReport := fs.Bool("json-report", false, "output a JSON report")
-	output := fs.String("output", "", "write JSON report to this file")
-	textOutput := fs.String("text-output", "", "write the text summary to this file")
+	outputFormat := fs.String("output-format", "text", "output format: text, json, json-report, csv, or html")
+	output := fs.String("output", "", "write the report to this file instead of stdout")
 	concurrency := fs.Int("concurrency", 5, "maximum number of concurrent checks")
 	retries := fs.Int("retries", 0, "number of retry attempts after the initial check fails")
 	version := fs.Bool("version", false, "print version information and exit")
@@ -72,6 +68,10 @@ func parseArgs(args []string) (Options, error) {
 		return Options{}, fmt.Errorf("--retries cannot be negative, got %d", *retries)
 	}
 
+	if *outputFormat != "text" && *outputFormat != "json" && *outputFormat != "json-report" && *outputFormat != "csv" && *outputFormat != "html" {
+		return Options{}, fmt.Errorf("invalid --output-format %q: must be text, json, json-report, csv, or html", *outputFormat)
+	}
+
 	rest := fs.Args()
 	if len(rest) != 1 {
 		if len(rest) == 0 {
@@ -82,24 +82,13 @@ func parseArgs(args []string) (Options, error) {
 	if rest[0] == "" {
 		return Options{}, errors.New("filename is required")
 	}
-	if *output != "" && !*json && !*jsonReport {
-		return Options{}, errors.New("--output requires --json or --json-report")
-	}
-	if *json && *jsonReport {
-		return Options{}, errors.New("--json and --json-report cannot be used together")
-	}
-	if *textOutput != "" && (*json || *jsonReport) {
-		return Options{}, errors.New("--text-output cannot be used with --json or --json-report")
-	}
 
 	return Options{
-		Path:        rest[0],
-		JSONOutput:  *json,
-		JSONReport:  *jsonReport,
-		OutputFile:  *output,
-		TextOutput:  *textOutput,
-		Concurrency: *concurrency,
-		Retries:     *retries,
+		Path:         rest[0],
+		OutputFormat: *outputFormat,
+		OutputFile:   *output,
+		Concurrency:  *concurrency,
+		Retries:      *retries,
 	}, nil
 }
 

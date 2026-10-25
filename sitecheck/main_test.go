@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -23,25 +25,27 @@ func TestParseArgs(t *testing.T) {
 		want    Options
 		wantErr string
 	}{
-		{name: "filename", args: []string{"sites.txt"}, want: Options{Path: "sites.txt", Concurrency: 5}},
-		{name: "json and filename", args: []string{"--json", "sites.txt"}, want: Options{Path: "sites.txt", JSONOutput: true, Concurrency: 5}},
-		{name: "json output and filename", args: []string{"--json", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", JSONOutput: true, OutputFile: "report.json", Concurrency: 5}},
-		{name: "json report", args: []string{"--json-report", "sites.txt"}, want: Options{Path: "sites.txt", JSONReport: true, Concurrency: 5}},
-		{name: "json report output", args: []string{"--json-report", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", JSONReport: true, OutputFile: "report.json", Concurrency: 5}},
+		{name: "filename", args: []string{"sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "text", Concurrency: 5}},
+		{name: "output format json", args: []string{"--output-format", "json", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "json", Concurrency: 5}},
+		{name: "output format json with output", args: []string{"--output-format", "json", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "json", OutputFile: "report.json", Concurrency: 5}},
+		{name: "output format json report", args: []string{"--output-format", "json-report", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "json-report", Concurrency: 5}},
+		{name: "output format json report with output", args: []string{"--output-format", "json-report", "--output", "report.json", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "json-report", OutputFile: "report.json", Concurrency: 5}},
+		{name: "output format text with output", args: []string{"--output-format", "text", "--output", "summary.txt", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "text", OutputFile: "summary.txt", Concurrency: 5}},
+		{name: "output format csv", args: []string{"--output-format", "csv", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "csv", Concurrency: 5}},
+		{name: "output format csv with output", args: []string{"--output-format", "csv", "--output", "report.csv", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "csv", OutputFile: "report.csv", Concurrency: 5}},
+		{name: "output format html", args: []string{"--output-format", "html", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "html", Concurrency: 5}},
+		{name: "output format html with output", args: []string{"--output-format", "html", "--output", "report.html", "sites.txt"}, want: Options{Path: "sites.txt", OutputFormat: "html", OutputFile: "report.html", Concurrency: 5}},
+		{name: "invalid output format", args: []string{"--output-format", "xml", "sites.txt"}, wantErr: `invalid --output-format "xml": must be text, json, json-report, csv, or html`},
+		{name: "output format empty", args: []string{"--output-format", "", "sites.txt"}, wantErr: `invalid --output-format "": must be text, json, json-report, csv, or html`},
 		{name: "no args", args: []string{}, wantErr: "filename is required"},
-		{name: "json without filename", args: []string{"--json"}, wantErr: "filename is required"},
+		{name: "output format json without filename", args: []string{"--output-format", "json"}, wantErr: "filename is required"},
 		{name: "unknown flag", args: []string{"--unknown", "sites.txt"}, wantErr: "flag provided but not defined: -unknown"},
 		{name: "two filenames", args: []string{"a.txt", "b.txt"}, wantErr: "too many arguments"},
-		{name: "unknown flag after json", args: []string{"--json", "--unknown"}, wantErr: "flag provided but not defined: -unknown"},
+		{name: "unknown flag after output format", args: []string{"--output-format", "json", "--unknown"}, wantErr: "flag provided but not defined: -unknown"},
 		{name: "empty filename", args: []string{""}, wantErr: "filename is required"},
-		{name: "json and empty filename", args: []string{"--json", ""}, wantErr: "filename is required"},
+		{name: "output format json and empty filename", args: []string{"--output-format", "json", ""}, wantErr: "filename is required"},
 		{name: "three filenames", args: []string{"a.txt", "b.txt", "c.txt"}, wantErr: "too many arguments"},
-		{name: "output without json", args: []string{"--output", "report.json", "sites.txt"}, wantErr: "--output requires --json or --json-report"},
-		{name: "json output without filename", args: []string{"--json", "--output", "report.json"}, wantErr: "filename is required"},
-		{name: "json and json report", args: []string{"--json", "--json-report", "sites.txt"}, wantErr: "--json and --json-report cannot be used together"},
-		{name: "text output", args: []string{"--text-output", "report.txt", "sites.txt"}, want: Options{Path: "sites.txt", TextOutput: "report.txt", Concurrency: 5}},
-		{name: "json and text output", args: []string{"--json", "--text-output", "report.txt", "sites.txt"}, wantErr: "--text-output cannot be used with --json or --json-report"},
-		{name: "json report and text output", args: []string{"--json-report", "--text-output", "report.txt", "sites.txt"}, wantErr: "--text-output cannot be used with --json or --json-report"},
+		{name: "output format json output without filename", args: []string{"--output-format", "json", "--output", "report.json"}, wantErr: "filename is required"},
 		{name: "help", args: []string{"--help"}, want: Options{Help: true}},
 		{name: "help with args", args: []string{"--help", "sites.txt"}, want: Options{Help: true}},
 	}
@@ -593,5 +597,163 @@ func TestToJSONResultPingMarshal(t *testing.T) {
 	}
 	if decoded[0].Ping == nil || !decoded[0].Ping.Success {
 		t.Errorf("Ping = %v, want success", decoded[0].Ping)
+	}
+}
+
+func TestWriteCSV(t *testing.T) {
+	results := []Result{
+		{
+			URL:        "https://example.com",
+			StatusCode: 200,
+			Up:         true,
+			Duration:   150 * time.Millisecond,
+			Attempts:   1,
+			IPs:        []string{"93.184.216.34"},
+			Ping:       PingResult{Ran: true, Success: true, LatencyMS: 18.32},
+		},
+		{
+			URL:        "https://down.example.com",
+			StatusCode: 0,
+			Up:         false,
+			Duration:   5012 * time.Millisecond,
+			Attempts:   2,
+			Reason:     "DNS",
+		},
+		{
+			URL:     "https://skipped.example.com",
+			Skipped: true,
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := writeCSV(&buf, results); err != nil {
+		t.Fatalf("writeCSV() error = %v, want nil", err)
+	}
+
+	csvReader := csv.NewReader(&buf)
+	csvReader.FieldsPerRecord = 10
+	records, err := csvReader.ReadAll()
+	if err != nil {
+		t.Fatalf("csv.ReadAll() error = %v, want nil", err)
+	}
+
+	if len(records) != 4 {
+		t.Fatalf("len(records) = %d, want 4 (header + 3 rows)", len(records))
+	}
+
+	wantHeader := []string{"URL", "Status", "State", "Duration_ms", "Attempts", "Reason", "IP", "Ping_ms", "TLS_expires", "TLS_status"}
+	if !slices.Equal(records[0], wantHeader) {
+		t.Errorf("header = %v, want %v", records[0], wantHeader)
+	}
+
+	// row 0: UP host with IP and ping
+	up := records[1]
+	if up[0] != "https://example.com" {
+		t.Errorf("row0 URL = %q, want %q", up[0], "https://example.com")
+	}
+	if up[1] != "200" {
+		t.Errorf("row0 Status = %q, want %q", up[1], "200")
+	}
+	if up[2] != "UP" {
+		t.Errorf("row0 State = %q, want UP", up[2])
+	}
+	if up[3] != "150" {
+		t.Errorf("row0 Duration_ms = %q, want 150", up[3])
+	}
+	if up[4] != "1" {
+		t.Errorf("row0 Attempts = %q, want 1", up[4])
+	}
+	if up[6] != "93.184.216.34" {
+		t.Errorf("row0 IP = %q, want 93.184.216.34", up[6])
+	}
+	if up[7] != "18.32" {
+		t.Errorf("row0 Ping_ms = %q, want 18.32", up[7])
+	}
+
+	// row 1: DOWN host, no IP/ping
+	down := records[2]
+	if down[2] != "DOWN" {
+		t.Errorf("row1 State = %q, want DOWN", down[2])
+	}
+	if down[5] != "DNS" {
+		t.Errorf("row1 Reason = %q, want DNS", down[5])
+	}
+	if down[6] != "" {
+		t.Errorf("row1 IP = %q, want empty", down[6])
+	}
+	if down[7] != "" {
+		t.Errorf("row1 Ping_ms = %q, want empty", down[7])
+	}
+
+	// row 2: skipped
+	skipped := records[3]
+	if skipped[2] != "—" {
+		t.Errorf("row2 State = %q, want em-dash for skipped", skipped[2])
+	}
+	if skipped[3] != "0" {
+		t.Errorf("row2 Duration_ms = %q, want 0", skipped[3])
+	}
+	if skipped[4] != "0" {
+		t.Errorf("row2 Attempts = %q, want 0", skipped[4])
+	}
+}
+
+func TestWriteHTML(t *testing.T) {
+	report := Report{
+		System:        SystemInfo{Hostname: "host", Username: "alex", OS: "Ubuntu 24.04"},
+		Total:         3,
+		UpCount:       1,
+		DownCount:     1,
+		CheckDuration: 5 * time.Second,
+		Reasons:       map[string]int{"DNS": 1},
+		Results: []Result{
+			{URL: "https://example.com", StatusCode: 200, Up: true, Duration: 150 * time.Millisecond, Attempts: 1, IPs: []string{"93.184.216.34"}},
+			{URL: "https://down.example.com", Up: false, Duration: 5012 * time.Millisecond, Attempts: 2, Reason: "DNS"},
+			{URL: "https://skipped.example.com", Skipped: true},
+		},
+	}
+
+	var buf bytes.Buffer
+	if err := writeHTML(&buf, report, time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("writeHTML() error = %v, want nil", err)
+	}
+
+	out := buf.String()
+
+	checks := []string{
+		"<!doctype html>",
+		"Отчёт",
+		"Сформирован",
+		"Проверено",
+		"Доступно",
+		"Недоступно",
+		"Результаты",
+		"example.com",
+		"badge up",
+		"badge down",
+		"badge", // skipped row
+		"93.184.216.34",
+		"DNS",
+		"Сеть",
+		"Система",
+		"Причины недоступности",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Errorf("HTML output missing %q", want)
+		}
+	}
+
+	// HTML must escape user-provided values (no raw injection).
+	injected := Result{URL: "https://bad.com/?a=<script>", Up: false, Reason: "<b>evil</b>"}
+	var buf2 bytes.Buffer
+	if err := writeHTML(&buf2, Report{Results: []Result{injected}}, time.Time{}); err != nil {
+		t.Fatalf("writeHTML() error = %v, want nil", err)
+	}
+	if strings.Contains(buf2.String(), "<script>") {
+		t.Errorf("HTML output contains unescaped <script> tag")
+	}
+	if strings.Contains(buf2.String(), "<b>evil</b>") {
+		t.Errorf("HTML output contains unescaped <b>evil</b>")
 	}
 }

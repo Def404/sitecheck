@@ -13,11 +13,15 @@
 - Повторные попытки: `--retries N` с фиксированным бэкоффом 200 мс
 - Параллельная проверка: `--concurrency N` (по умолчанию 5)
 - Прогресс-бар: `[██████░░░░] 60% (3/5)` при нескольких URL на TTY.
-  Строка очищается перед отчётом. Не выводится при `--json`,
-  `--json-report` и `--text-output`
+  Строка очищается перед отчётом. Не выводится при JSON-форматах
+  и при записи отчёта в файл
 - Текстовый отчёт: ящики `┌─┐│├─┤└─┘`, таблица результатов,
   ANSI-цвета (автоотключение при pipe/файле)
-- JSON-отчёт: `--json` (массив результатов) или `--json-report` (полный отчёт)
+- Формат вывода: `--output-format text|json|json-report|csv|html` (по умолчанию `text`);
+  `json` — массив результатов, `json-report` — полный отчёт,
+  `csv` — табличный экспорт для Excel/Google Sheets,
+  `html` — самодостаточная HTML-страница с современным дизайном
+- Запись отчёта в файл: `--output FILE` для любого формата (stdout по умолчанию)
 - Сведения о системе: hostname, user, OS (Linux / macOS / Windows)
 - Сведения о сети: локальный IP, исходящий IP, шлюз (с ping), DNS-серверы,
   VPN-интерфейсы, все IPv4
@@ -45,13 +49,25 @@ make cross        # все 5 платформ → dist/
 ./dist/sitecheck sites.txt
 
 # JSON-массив результатов
-./dist/sitecheck --json sites.txt
+./dist/sitecheck --output-format json sites.txt
 
 # JSON-отчёт (система + сеть + результаты + итоги)
-./dist/sitecheck --json-report sites.txt
+./dist/sitecheck --output-format json-report sites.txt
 
 # JSON-отчёт в файл
-./dist/sitecheck --json-report --output report.json sites.txt
+./dist/sitecheck --output-format json-report --output report.json sites.txt
+
+# Текстовый отчёт в файл
+./dist/sitecheck --output-format text --output summary.txt sites.txt
+
+# CSV-экспорт (stdout)
+./dist/sitecheck --output-format csv sites.txt
+
+# CSV-экспорт в файл
+./dist/sitecheck --output-format csv --output report.csv sites.txt
+
+# HTML-отчёт в файл (самодостаточная страница)
+./dist/sitecheck --output-format html --output report.html sites.txt
 
 # Параллельная проверка (8 потоков), 1 повтор после сбоя
 ./dist/sitecheck --concurrency 8 --retries 1 sites.txt
@@ -84,17 +100,12 @@ http://internal.local:8080/health
 | Флаг | Описание | По умолчанию |
 |---|---|---|
 | `file` (позиционный) | путь к файлу со списком URL | — |
+| `--output-format FORMAT` | формат вывода: `text` (отчёт), `json` (массив результатов), `json-report` (полный отчёт), `csv` (таблица для Excel/Sheets), `html` (HTML-страница) | `text` |
+| `--output FILE` | записать отчёт в файл вместо stdout (любой формат) | stdout |
 | `--concurrency N` | число параллельных проверок (положительное целое) | `5` |
 | `--retries N` | число повторных попыток после сбоя (≥ 0) | `0` |
-| `--json` | вывод: JSON-массив результатов | выкл |
-| `--json-report` | вывод: JSON-отчёт (система, сеть, результаты, итоги) | выкл |
-| `--output FILE` | записать JSON в файл (только с `--json` / `--json-report`) | stdout |
-| `--text-output FILE` | продублировать текстовый отчёт в файл (только без `--json` / `--json-report`) | stdout |
 | `--version` | версия сборки (ldflags) и выход | — |
 | `--help` | строка использования и примеры и выход | — |
-
-Совместимость флагов: `--json` и `--json-report` взаимоисключающие;
-`--output` требует один из них; `--text-output` требует текстовый режим.
 
 ## Переменные окружения
 
@@ -160,7 +171,7 @@ http://internal.local:8080/health
 > Цвета (UP — зелёный, DOWN — красный, TLS WARNING — жёлтый, заголовки — bold)
 > автоматически отключаются при перенаправлении в файл или pipe.
 
-### JSON-отчёт (`--json-report`)
+### JSON-отчёт (`--output-format json-report`)
 
 ```json
 {
@@ -206,7 +217,7 @@ http://internal.local:8080/health
 }
 ```
 
-### JSON-массив результатов (`--json`)
+### JSON-массив результатов (`--output-format json`)
 
 ```json
 [
@@ -230,6 +241,34 @@ http://internal.local:8080/health
   }
 ]
 ```
+
+### CSV-экспорт (`--output-format csv`)
+
+```csv
+URL,Status,State,Duration_ms,Attempts,Reason,IP,Ping_ms,TLS_expires,TLS_status
+https://example.com,200,UP,142,1,,93.184.216.34,18.32,2026-11-01T00:00:00Z,OK
+https://api.example.com,,DOWN,5012,2,DNS,,,
+```
+
+Колонки: `URL`, `Status` (HTTP-статус), `State` (`UP`/`DOWN`/`—` для
+пропущенных), `Duration_ms`, `Attempts`, `Reason`, `IP` (первый из DNS),
+`Ping_ms`, `TLS_expires` (RFC 3339, UTC), `TLS_status` (`OK`/`WARNING`/
+`EXPIRED`/`ERROR`). Пустые ячейки — поле не применялось (например, ping
+недоступен или сайт `http`).
+
+### HTML-отчёт (`--output-format html`)
+
+Самодостаточная HTML-страница (встроенный CSS, без внешних зависимостей):
+карточки-сводка (Проверено / Доступно / Недоступно / Время), таблица
+результатов с цветными бейджами UP/DOWN, секции «Сеть» и «Система», а при
+наличии причин — блок «Причины недоступности». Тёмная тема, адаптивная
+сетка. Все пользовательские значения экранируются (`html.EscapeString`).
+
+```bash
+./dist/sitecheck --output-format html --output report.html sites.txt
+```
+
+Откройте `report.html` в браузере.
 
 ## Состояние сайта
 

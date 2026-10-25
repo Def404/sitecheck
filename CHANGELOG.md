@@ -5,6 +5,29 @@
 Формат основан на [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/),
 версионирование — по [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [0.7.0] — 2026-10-25
+
+### Добавлено
+- Флаг `--output-format text|json|json-report|csv|html` (TODOS #20, #26) —
+  единый выбор формата вывода (по умолчанию `text`). Неизвестное значение —
+  ошибка.
+- CSV-экспорт (TODOS #26): `--output-format csv` выводит таблицу
+  `URL,Status,State,Duration_ms,Attempts,Reason,IP,Ping_ms,TLS_expires,
+  TLS_status` — для импорта в Excel/Google Sheets.
+- HTML-отчёт: `--output-format html` — самодостаточная страница (встроенный
+  CSS, без внешних зависимостей) с карточками-сводкой, таблицей результатов
+  с цветными бейджами UP/DOWN, секциями «Сеть»/«Система» и блоком причин.
+  Шрифт Inter (Google Fonts), тёмная тема, адаптивная сетка, ссылка на GitHub
+  в шапке, экранирование пользовательских значений.
+
+### Изменено
+- `--output FILE` теперь работает с любым форматом вывода, а не только с
+  JSON.
+
+### Удалено
+- Флаги `--json`, `--json-report`, `--text-output` (заменены
+  `--output-format` и `--output`).
+
 ## [0.6.0] — 2026-10-25
 
 ### Добавлено

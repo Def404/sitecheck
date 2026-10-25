@@ -57,10 +57,10 @@ func run(args []string) error {
 
 	var wg sync.WaitGroup
 
-	// Прогресс-строка пишется в stdout; при JSON или --text-output
-	// подавляется (io.Discard), чтобы не смешивать \r с JSON/файлом.
+	// Прогресс-строка пишется в stdout; при JSON или записи отчёта
+	// в файл подавляется (io.Discard), чтобы не смешивать \r с JSON/файлом.
 	var progressOut io.Writer
-	if opts.JSONOutput || opts.JSONReport || opts.TextOutput != "" {
+	if opts.OutputFormat != "text" || opts.OutputFile != "" {
 		progressOut = io.Discard
 	} else {
 		progressOut = os.Stdout
@@ -140,8 +140,8 @@ func run(args []string) error {
 
 	report := buildReport(sysInfo, netInfo, results, checkDuration)
 
-	switch {
-	case opts.JSONReport:
+	switch opts.OutputFormat {
+	case "json-report":
 		data, err := marshalReport(report)
 		if err != nil {
 			return err
@@ -151,7 +151,7 @@ func run(args []string) error {
 		} else if err = saveJSON(opts.OutputFile, data); err != nil {
 			return fmt.Errorf("save JSON report to %s: %w", opts.OutputFile, err)
 		}
-	case opts.JSONOutput:
+	case "json":
 		if opts.OutputFile == "" {
 			err := printJSONResults(results)
 			if err != nil {
@@ -160,12 +160,28 @@ func run(args []string) error {
 		} else if err := saveJSONResults(opts.OutputFile, results); err != nil {
 			return fmt.Errorf("save JSON report to %s: %w", opts.OutputFile, err)
 		}
-	default:
-		if opts.TextOutput == "" {
+	case "csv":
+		if opts.OutputFile == "" {
+			if err := writeCSV(os.Stdout, results); err != nil {
+				return fmt.Errorf("write CSV: %w", err)
+			}
+		} else if err := writeCSVToBoth(results, opts.OutputFile); err != nil {
+			return err
+		}
+	case "html":
+		if opts.OutputFile == "" {
+			if err := writeHTML(os.Stdout, report, time.Now()); err != nil {
+				return fmt.Errorf("write HTML: %w", err)
+			}
+		} else if err := writeHTMLToBoth(report, time.Now(), opts.OutputFile); err != nil {
+			return err
+		}
+	default: // text
+		if opts.OutputFile == "" {
 			if err := printReport(os.Stdout, report); err != nil {
 				return err
 			}
-		} else if err := writeReportToBoth(report, opts.TextOutput); err != nil {
+		} else if err := writeReportToBoth(report, opts.OutputFile); err != nil {
 			return err
 		}
 	}

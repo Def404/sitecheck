@@ -45,7 +45,7 @@ func TestBar(t *testing.T) {
 		{width: 5, filled: 0, want: "░░░░░"},
 		{width: 5, filled: 2, want: "██░░░"},
 		{width: 5, filled: 5, want: "█████"},
-		{width: 5, filled: 9, want: "█████"}, // clamp up
+		{width: 5, filled: 9, want: "█████"},  // clamp up
 		{width: 5, filled: -1, want: "░░░░░"}, // clamp down
 	}
 	for _, tt := range tests {

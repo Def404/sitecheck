@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-10-25
+
+### Исправлено
+- gofmt: выравнивание полей в `main_test.go` и комментария в `progress_test.go`,
+  сломанное в 0.4.0; CI-шаг `gofmt check` падает на 0.4.0.
+
 ## [0.4.0] — 2026-10-20
 
 ### Добавлено
@@ -102,7 +108,8 @@
 - `isConnectionRefused` — работает только на Linux через
   `syscall.ECONNREFUSED` (см. `TODOS.md` п. 3 для macOS/Windows).
 
-[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Def404/sitecheck/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Def404/sitecheck/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Def404/sitecheck/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Def404/sitecheck/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Def404/sitecheck/compare/v0.1.0...v0.2.0

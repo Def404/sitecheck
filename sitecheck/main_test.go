@@ -377,8 +377,8 @@ func TestToJSONResultSkipped(t *testing.T) {
 
 func TestToJSONResultNoSkipped(t *testing.T) {
 	result := Result{
-		URL:     "https://up.example.com",
-		Up:      true,
+		URL:      "https://up.example.com",
+		Up:       true,
 		Attempts: 1,
 	}
 
